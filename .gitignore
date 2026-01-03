@@ -1,0 +1,53 @@
+# --- Rust / Cargo ---
+/target/
+**/target/
+Cargo.lock
+
+# --- Build artifacts ---
+*.rlib
+*.rmeta
+*.d
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+
+# --- Temporary files ---
+*.tmp
+*.bak
+*.old
+
+# --- Coverage / Bench ---
+/coverage/
+/tarpaulin-report.html
+/criterion/
+
+# --- PDF / Image test outputs ---
+/tests/output/
+/tests/tmp/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.tiff
+
+# --- Model / GPU artifacts ---
+/models/*.onnx
+/models/*.bin
+/gpu-shaders/*.spv
+
+# --- Config / Secrets ---
+.env
+*.key
+*.pem
+
