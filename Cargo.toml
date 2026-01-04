@@ -1,0 +1,55 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/transmute-common",
+    "crates/transmute-formats",
+    "crates/transmute-core",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["PsychoPunkSage"]
+
+[workspace.dependencies]
+# Core utilities
+thiserror = "2.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Image processing
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "bmp"] }
+rayon = "1.10"
+
+# GPU infrastructure
+wgpu = { version = "27.0.1", features = ["wgsl"] }
+bytemuck = { version = "1.14", features = ["derive"] }
+pollster = "0.4"
+
+# File I/O
+memmap2 = "0.9"
+directories = "6.0"
+
+# Utilities
+uuid = { version = "1.10", features = ["v4", "fast-rng"] }
+chrono = "0.4"
+
+# Testing
+criterion = { version = "0.8", features = ["html_reports"] }
+
+# workspace crates
+transmute-core = { path = "crates/transmute-core" }
+transmute-common = { path = "crates/transmute-common" }
+transmute-formats = { path = "crates/transmute-formats" }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
