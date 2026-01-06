@@ -1,7 +1,5 @@
 use image::{DynamicImage, ImageBuffer, Rgba};
-use printpdf::{Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, Pt, Px, RawImage, XObjectTransform};
-use std::fs::File;
-use std::io::BufWriter;
+use printpdf::{Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, Pt, RawImage, XObjectTransform};
 use std::path::{Path, PathBuf};
 use transmute_common::{Error, Result};
 
@@ -82,7 +80,10 @@ impl PdfGenerator {
 
             // Convert DynamicImage to PNG bytes for RawImage
             let mut png_bytes = Vec::new();
-            img.write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageFormat::Png)?;
+            img.write_to(
+                &mut std::io::Cursor::new(&mut png_bytes),
+                image::ImageFormat::Png,
+            )?;
 
             // Decode into RawImage
             let raw_image = RawImage::decode_from_bytes(&png_bytes, &mut Vec::new())
@@ -107,7 +108,7 @@ impl PdfGenerator {
                     translate_y: Some(Pt(y_offset * 2.834645)),
                     scale_x: Some(fit_width_mm / (img.width() as f32 / self.options.dpi * 25.4)),
                     scale_y: Some(fit_height_mm / (img.height() as f32 / self.options.dpi * 25.4)),
-                    dpi: Some(self.options.dpi as f64),
+                    dpi: Some(self.options.dpi),
                     ..Default::default()
                 },
             }];
@@ -122,11 +123,10 @@ impl PdfGenerator {
         }
 
         // Write PDF to file
-        let pdf_bytes = doc.with_pages(pages).save(&PdfSaveOptions::default(), &mut Vec::new());
+        let pdf_bytes = doc
+            .with_pages(pages)
+            .save(&PdfSaveOptions::default(), &mut Vec::new());
         std::fs::write(output_path, pdf_bytes)?;
-        let writer = BufWriter::new(file);
-        doc.save(&mut std::io::BufWriter::new(writer))
-            .map_err(|e| Error::ConversionError(format!("PDF save failed: {:?}", e)))?;
 
         tracing::info!("PDF generated successfully at {:?}", output_path);
         Ok(())
@@ -177,7 +177,7 @@ impl PdfExtractor {
         let page_count = document.pages().len();
         tracing::info!("PDF has {} pages", page_count);
 
-        let mut images = Vec::with_capacity(page_count);
+        let mut images = Vec::with_capacity(page_count as usize);
 
         // Render each page
         for page_idx in 0..page_count {
@@ -202,9 +202,9 @@ impl PdfExtractor {
             // Convert bitmap to DynamicImage
             let width = bitmap.width() as u32;
             let height = bitmap.height() as u32;
-            let rgba_buffer = bitmap.as_rgba8().to_vec();
+            let rgba_buffer = bitmap.as_raw_bytes();
 
-            let img = image::RgbaImage::from_raw(width, height, rgba_buffer).ok_or_else(|| {
+            let img = RgbaImage::from_raw(width, height, rgba_buffer).ok_or_else(|| {
                 Error::ConversionError("Failed to create image from bitmap".into())
             })?;
 
