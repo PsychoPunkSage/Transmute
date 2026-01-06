@@ -64,6 +64,24 @@ impl MediaFormat {
             Self::Pdf => None,
         }
     }
+
+    /// Check if format supports multi-page documents
+    pub fn supports_multipage(&self) -> bool {
+        matches!(self, Self::Pdf)
+    }
+
+    /// Get MIME type for HTTP/export
+    pub fn mime_type(&self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+            Self::Webp => "image/webp",
+            Self::Tiff => "image/tiff",
+            Self::Bmp => "image/bmp",
+            Self::Gif => "image/gif",
+            Self::Pdf => "application/pdf",
+        }
+    }
 }
 
 impl std::fmt::Display for MediaFormat {
