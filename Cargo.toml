@@ -39,6 +39,15 @@ chrono = "0.4"
 # Testing
 criterion = { version = "0.8", features = ["html_reports"] }
 
+# PDF Support
+printpdf = { version = "0.8", features = ["png"] } # PDF Generation with PNG support
+lopdf = "0.38" # low level PDF Manipulation
+pdfium-render = "0.8" # GPU accelerated-rasterization
+
+# Async batch processing
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "sync", "time"] }
+futures = "0.3"
+
 # workspace crates
 transmute-core = { path = "crates/transmute-core" }
 transmute-common = { path = "crates/transmute-common" }
