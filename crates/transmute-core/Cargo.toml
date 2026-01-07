@@ -7,9 +7,11 @@ edition = "2024"
 transmute-common.workspace = true
 transmute-formats.workspace = true
 
+tokio.workspace = true
 image.workspace = true
 rayon.workspace = true
 anyhow.workspace = true
+futures.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 
@@ -17,6 +19,7 @@ thiserror.workspace = true
 wgpu.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true
+num_cpus.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -25,4 +28,9 @@ tempfile = "3.13"
 [[bench]]
 name = "conversion_benchmark"
 path = "benches/conversion_benchmark.rs"
+harness = false
+
+[[bench]]
+name = "pdf_benchmark"
+path = "benches/pdf_benchmark.rs"
 harness = false
