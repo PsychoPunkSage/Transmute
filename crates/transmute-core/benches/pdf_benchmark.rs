@@ -40,7 +40,7 @@ fn benchmark_pdf_generation(c: &mut Criterion) {
 
 criterion_group! {
     name = pdf_benches;
-    config = Criterion::default().sample_size(10); // PDF ops are slow
+    config = Criterion::default().sample_size(10); // 10 independent readings for each experiment
     targets = benchmark_pdf_generation
 }
 criterion_main!(pdf_benches);
