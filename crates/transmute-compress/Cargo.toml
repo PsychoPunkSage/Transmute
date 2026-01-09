@@ -1,0 +1,31 @@
+[package]
+name = "transmute-compress"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+transmute-common.workspace = true
+
+image.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+# GPU
+wgpu.workspace = true
+bytemuck.workspace = true
+pollster.workspace = true
+
+# Compression
+webp.workspace = true
+oxipng.workspace = true
+mozjpeg.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile = "3.13"
+
+[[bench]]
+name = "compression_benchmark"
+harness = false
