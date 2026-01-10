@@ -1,4 +1,4 @@
-use image::DynamicImage;
+use image::{DynamicImage, GenericImageView};
 use transmute_common::{Error, Result};
 
 /// Quality assessment metrics
@@ -60,8 +60,8 @@ impl QualityMetric {
     /// Simplified SSIM calculation (full SSIM requires windowing)
     fn calculate_ssim(img1: &image::RgbImage, img2: &image::RgbImage) -> f64 {
         // Constants for stability
-        let c1 = (0.01 * 255.0).powi(2);
-        let c2 = (0.03 * 255.0).powi(2);
+        let c1 = (0.01_f64 * 255.0).powi(2);
+        let c2 = (0.03_f64 * 255.0).powi(2);
 
         // Calculate means
         let mean1 = Self::mean_intensity(img1);
