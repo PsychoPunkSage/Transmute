@@ -16,6 +16,7 @@ thiserror.workspace = true
 wgpu.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true
+futures.workspace = true
 
 # Compression
 webp.workspace = true

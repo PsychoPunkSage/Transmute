@@ -1,6 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 use transmute_common::{Error, Result};
 use wgpu::{Device, Queue};
+use wgpu::util::DeviceExt;
 
 /// GPU context for color space conversion
 pub struct GpuColorConverter {
@@ -131,7 +132,7 @@ impl GpuColorConverter {
             mapped_at_creation: false,
         });
 
-        // Create staging buffer for readback
+        // Create staging buffer for readback: READ from CPU VRAM
         let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Staging Buffer"),
             size: output_size,
@@ -185,16 +186,20 @@ impl GpuColorConverter {
 
         self.queue.submit(Some(encoder.finish()));
 
-        // Read back results
+        // Read back results - map buffer and wait for completion
         let buffer_slice = staging_buffer.slice(..);
         let (tx, rx) = futures::channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-            tx.send(result).unwrap();
+            let _ = tx.send(result);
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        // Poll and wait for completion
+        let _ = self.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_secs(5))
+        });
         pollster::block_on(rx)
-            .map_err(|_| Error::GpuError("Failed to receive map result".into()))?
+            .map_err(|_| Error::GpuError("Failed to receive buffer mapping result".into()))?
             .map_err(|e| Error::GpuError(format!("Buffer mapping failed: {:?}", e)))?;
 
         let data = buffer_slice.get_mapped_range();
@@ -219,7 +224,7 @@ impl GpuColorConverter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transmute_core::GpuContext;
+    use transmute_common::gpu::GpuContext;
 
     #[test]
     fn test_gpu_color_conversion() {
