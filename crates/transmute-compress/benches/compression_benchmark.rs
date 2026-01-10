@@ -29,10 +29,10 @@ fn benchmark_jpeg_compression(c: &mut Criterion) {
             });
         });
 
-        // GPU compression (if available)
+        // GPU compression (if available) - initialize compressor OUTSIDE iter loop
         if GpuContext::new().is_ok() {
+            let compressor = ImageCompressor::new(true).unwrap();
             group.bench_with_input(BenchmarkId::new("GPU", label), &img, |b, img| {
-                let compressor = ImageCompressor::new(true).unwrap();
                 b.iter(|| {
                     compressor.compress(
                         black_box(img),

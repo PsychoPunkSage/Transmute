@@ -133,19 +133,45 @@ impl ImageCompressor {
         }
     }
 
-    /// GPU path: RGB→YCbCr on GPU, then mozjpeg encoding
+    /// GPU path: RGB→YCbCr on GPU, then mozjpeg encoding with YCbCr data
     fn compress_jpeg_gpu(&self, img: &DynamicImage, quality: u8) -> Result<Vec<u8>> {
         let converter = self.gpu_converter.as_ref().unwrap();
 
         let rgb_img = img.to_rgb8();
         let rgb_data = rgb_img.as_raw();
+        let width = img.width() as usize;
+        let height = img.height() as usize;
 
         // Convert RGB→YCbCr on GPU
-        let _ycbcr_data = converter.rgb_to_ycbcr(rgb_data, img.width(), img.height())?;
+        let ycbcr_data = converter.rgb_to_ycbcr(rgb_data, img.width(), img.height())?;
 
-        // For now, fall back to CPU encoding (full GPU JPEG encoding is complex)
-        // In production, would implement DCT and quantization in GPU shaders
-        self.compress_jpeg_cpu(img, quality)
+        // Use mozjpeg with YCbCr color space (accepts GPU output directly)
+        use mozjpeg::{ColorSpace, Compress, ScanMode};
+
+        // Convert f32 YCbCr to u8 for mozjpeg
+        let ycbcr_u8: Vec<u8> = ycbcr_data
+            .iter()
+            .map(|&v| v.clamp(0.0, 255.0) as u8)
+            .collect();
+
+        let mut comp = Compress::new(ColorSpace::JCS_YCbCr);
+        comp.set_size(width, height);
+        comp.set_quality(quality as f32);
+        comp.set_scan_optimization_mode(ScanMode::AllComponentsTogether);
+        comp.set_optimize_coding(true);
+
+        let mut comp = comp
+            .start_compress(Vec::new())
+            .map_err(|e| Error::ConversionError(format!("GPU JPEG compression failed: {}", e)))?;
+
+        comp.write_scanlines(&ycbcr_u8)
+            .map_err(|e| Error::ConversionError(format!("GPU JPEG write failed: {}", e)))?;
+
+        let jpeg_data = comp
+            .finish()
+            .map_err(|e| Error::ConversionError(format!("GPU JPEG finish failed: {}", e)))?;
+
+        Ok(jpeg_data)
     }
 
     /// CPU path: mozjpeg with optimized settings

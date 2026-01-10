@@ -1,14 +1,24 @@
 use bytemuck::{Pod, Zeroable};
+use std::cell::RefCell;
 use transmute_common::{Error, Result};
 use wgpu::{Device, Queue};
-use wgpu::util::DeviceExt;
 
-/// GPU context for color space conversion
+/// Reusable GPU buffer pool for a specific size
+struct BufferPool {
+    input_buffer: wgpu::Buffer,
+    output_buffer: wgpu::Buffer,
+    staging_buffer: wgpu::Buffer,
+    params_buffer: wgpu::Buffer,
+    capacity: usize, // pixel count
+}
+
+/// GPU context for color space conversion with buffer pooling
 pub struct GpuColorConverter {
     device: Device,
     queue: Queue,
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
+    buffer_pool: RefCell<Option<BufferPool>>,
 }
 
 #[repr(C)]
@@ -87,7 +97,79 @@ impl GpuColorConverter {
             queue,
             pipeline,
             bind_group_layout,
+            buffer_pool: RefCell::new(None),
         })
+    }
+
+    /// Get or create buffer pool for given pixel count
+    /// Reuses buffers if size matches, creates new ones if needed
+    fn get_or_create_buffers(&self, pixel_count: usize) -> BufferPool {
+        let mut pool = self.buffer_pool.borrow_mut();
+
+        // Reuse if capacity matches
+        if let Some(existing) = pool.as_ref() {
+            if existing.capacity == pixel_count {
+                tracing::debug!("Reusing buffer pool for {} pixels", pixel_count);
+                return BufferPool {
+                    input_buffer: existing.input_buffer.clone(),
+                    output_buffer: existing.output_buffer.clone(),
+                    staging_buffer: existing.staging_buffer.clone(),
+                    params_buffer: existing.params_buffer.clone(),
+                    capacity: existing.capacity,
+                };
+            }
+        }
+
+        // Create new buffers
+        tracing::debug!("Creating new buffer pool for {} pixels", pixel_count);
+        let input_size = (pixel_count * std::mem::size_of::<u32>()) as u64;
+        let output_size = (pixel_count * 4 * std::mem::size_of::<f32>()) as u64;
+
+        let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Pooled Input RGB Buffer"),
+            size: input_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Pooled Output YCbCr Buffer"),
+            size: output_size,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Pooled Staging Buffer"),
+            size: output_size,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let params_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Pooled Params Buffer"),
+            size: std::mem::size_of::<ImageParams>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let new_pool = BufferPool {
+            input_buffer,
+            output_buffer,
+            staging_buffer,
+            params_buffer,
+            capacity: pixel_count,
+        };
+
+        *pool = Some(BufferPool {
+            input_buffer: new_pool.input_buffer.clone(),
+            output_buffer: new_pool.output_buffer.clone(),
+            staging_buffer: new_pool.staging_buffer.clone(),
+            params_buffer: new_pool.params_buffer.clone(),
+            capacity: new_pool.capacity,
+        });
+
+        new_pool
     }
 
     /// Convert RGB image data to YCbCr on GPU
@@ -106,56 +188,32 @@ impl GpuColorConverter {
             packed_rgb.push((r << 16) | (g << 8) | b);
         }
 
-        // Create GPU buffers
+        // Get or create pooled buffers
+        let buffers = self.get_or_create_buffers(pixel_count);
+
+        // Update buffer contents
         let params = ImageParams { width, height };
-        let params_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Params Buffer"),
-                contents: bytemuck::bytes_of(&params),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            });
+        self.queue.write_buffer(&buffers.params_buffer, 0, bytemuck::bytes_of(&params));
+        self.queue.write_buffer(&buffers.input_buffer, 0, bytemuck::cast_slice(&packed_rgb));
 
-        let input_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Input RGB Buffer"),
-                contents: bytemuck::cast_slice(&packed_rgb),
-                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            });
+        let output_size = (pixel_count * 4 * std::mem::size_of::<f32>()) as u64;
 
-        let output_size = (pixel_count * 4 * std::mem::size_of::<f32>()) as u64; // vec4<f32>
-        let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Output YCbCr Buffer"),
-            size: output_size,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
-            mapped_at_creation: false,
-        });
-
-        // Create staging buffer for readback: READ from CPU VRAM
-        let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Staging Buffer"),
-            size: output_size,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        // Create bind group
+        // Create bind group (using pooled buffers)
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Color Convert Bind Group"),
             layout: &self.bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: params_buffer.as_entire_binding(),
+                    resource: buffers.params_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: input_buffer.as_entire_binding(),
+                    resource: buffers.input_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: output_buffer.as_entire_binding(),
+                    resource: buffers.output_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -181,13 +239,13 @@ impl GpuColorConverter {
             compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 
-        // Copy to staging buffer
-        encoder.copy_buffer_to_buffer(&output_buffer, 0, &staging_buffer, 0, output_size);
+        // Copy to staging buffer (using pooled buffers)
+        encoder.copy_buffer_to_buffer(&buffers.output_buffer, 0, &buffers.staging_buffer, 0, output_size);
 
         self.queue.submit(Some(encoder.finish()));
 
         // Read back results - map buffer and wait for completion
-        let buffer_slice = staging_buffer.slice(..);
+        let buffer_slice = buffers.staging_buffer.slice(..);
         let (tx, rx) = futures::channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
             let _ = tx.send(result);
@@ -206,7 +264,7 @@ impl GpuColorConverter {
         let ycbcr_vec4: Vec<[f32; 4]> = bytemuck::cast_slice(&data).to_vec();
 
         drop(data);
-        staging_buffer.unmap();
+        buffers.staging_buffer.unmap();
 
         // Flatten vec4 to vec3 (ignore alpha channel)
         let mut ycbcr_flat = Vec::with_capacity(pixel_count * 3);
