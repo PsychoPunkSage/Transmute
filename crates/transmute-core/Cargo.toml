@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 transmute-common.workspace = true
 transmute-formats.workspace = true
+transmute-compress.workspace = true
 
 tokio.workspace = true
 image.workspace = true
