@@ -9,6 +9,9 @@ image.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 directories.workspace = true
+wgpu.workspace = true
+pollster.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 tempfile = "3.24"
