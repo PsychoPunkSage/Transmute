@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 use transmute_common::{Error, MediaFormat, PathManager, Result};
 use transmute_compress::{CompressionResult, ImageCompressor, QualitySettings};
 use transmute_formats::{ImageDecoder, ImageEncoder};
+use transmute_nlp::{
+    BatchIntent, CommandParser, CompressIntent, ConvertIntent, EnhanceIntent, Intent,
+};
 
 /// Main conversion engine
 pub struct Converter {
@@ -215,6 +218,67 @@ impl Converter {
             .par_iter()
             .map(|input| self.compress_image(input, target_format, quality, output_dir.clone()))
             .collect()
+    }
+
+    /// Execute natural language command
+    pub fn execute_command(&self, command: &str) -> Result<Vec<PathBuf>> {
+        tracing::info!("Executing command: {}", command);
+
+        let parser = CommandParser::new()?;
+        let intent = parser.parse(command)?;
+
+        match intent {
+            Intent::Convert(conv) => {
+                let output = self.convert_image(&conv.input, conv.target_format, conv.output)?;
+                Ok(vec![output])
+            }
+
+            Intent::Compress(comp) => {
+                let quality = comp.quality.to_settings();
+                let format = comp.target_format.unwrap_or_else(|| {
+                    MediaFormat::from_path(&comp.input).unwrap_or(MediaFormat::Jpeg)
+                });
+
+                let (output, result) =
+                    self.compress_image(&comp.input, format, quality, comp.output)?;
+
+                tracing::info!(
+                    "Compression: {:.1}% size reduction",
+                    result.size_reduction_percent()
+                );
+
+                Ok(vec![output])
+            }
+
+            Intent::Enhance(_) => {
+                // Only if Phase 4 is implemented
+                Err(Error::ConversionError(
+                    "Enhancement not yet implemented. Coming in Phase 4!".into(),
+                ))
+            }
+
+            Intent::Batch(batch) => {
+                use transmute_nlp::PathResolver;
+
+                let resolver = PathResolver::new()?;
+                let files = resolver.resolve_pattern(&batch.pattern)?;
+
+                if files.is_empty() {
+                    return Err(Error::ConversionError(format!(
+                        "No files matched pattern: {}",
+                        batch.pattern
+                    )));
+                }
+
+                tracing::info!("Processing {} files in batch", files.len());
+
+                let results = self.convert_batch(files, batch.target_format, batch.output);
+
+                let outputs: Vec<PathBuf> = results.into_iter().filter_map(|r| r.ok()).collect();
+
+                Ok(outputs)
+            }
+        }
     }
 }
 
