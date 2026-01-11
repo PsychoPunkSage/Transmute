@@ -232,11 +232,9 @@ impl CommandParser {
     fn parse_with_regex(&self, command: &str) -> Result<Intent> {
         use regex::Regex;
 
-        let cmd_lower = command.to_lowercase();
-
         // Convert pattern: "convert <path> to <format>"
         let convert_re = Regex::new(
-            r"(?i)convert\s+(.+?)\s+to\s+(png|jpg|jpeg|webp|pdf|tiff|bmp|gif)(?:\s+at\s+(.+))?",
+            r"(?i)convert\s+(.+?)\s+to\s+(png|jpg|jpeg|webp|pdf|tiff|bmp|gif)(?:\s+(?:at|in)\s+(.+))?",
         )
         .unwrap();
 
@@ -264,7 +262,7 @@ impl CommandParser {
 
         // Compress pattern: "compress <path> to <quality>" (percentage or preset)
         let compress_percent_re = Regex::new(
-            r"(?i)(compress|optimize|reduce)\s+(.+?)\s+to\s+(\d+)%(?:\s+at\s+(.+))?$",
+            r"(?i)(compress|optimize|reduce)\s+(.+?)\s+to\s+(\d+)%(?:\s+(?:at|in)\s+(.+))?$",
         )
         .unwrap();
 
@@ -289,7 +287,7 @@ impl CommandParser {
 
         // Compress pattern with quality preset: "compress <path> to high quality"
         let compress_preset_re = Regex::new(
-            r"(?i)(compress|optimize|reduce)\s+(.+?)\s+to\s+(maximum|max|high|medium|balanced|low)\s*(?:quality)?(?:\s+at\s+(.+))?$",
+            r"(?i)(compress|optimize|reduce)\s+(.+?)\s+to\s+(maximum|max|high|medium|balanced|low)\s*(?:quality)?(?:\s+(?:at|in)\s+(.+))?$",
         )
         .unwrap();
 
@@ -320,7 +318,7 @@ impl CommandParser {
 
         // Simple compress without quality: "compress <path>"
         let compress_simple_re = Regex::new(
-            r"(?i)(compress|optimize|reduce)\s+(.+?)(?:\s+at\s+(.+))?$",
+            r"(?i)(compress|optimize|reduce)\s+(.+?)(?:\s+(?:at|in)\s+(.+))?$",
         )
         .unwrap();
 
@@ -343,7 +341,7 @@ impl CommandParser {
 
         // Enhance pattern: "enhance <path> by 2x/4x"
         let enhance_re = Regex::new(
-            r"(?i)(enhance|upscale|improve|enlarge)\s+(.+?)\s+(?:by\s+)?(2|4)x?(?:\s+at\s+(.+))?$",
+            r"(?i)(enhance|upscale|improve|enlarge)\s+(.+?)\s+(?:by\s+)?(2|4)x?(?:\s+(?:at|in)\s+(.+))?$",
         )
         .unwrap();
 
@@ -370,7 +368,7 @@ impl CommandParser {
 
         // Batch pattern: "batch <pattern> convert to <format> at <output>"
         let batch_re = Regex::new(
-            r"(?i)(batch|bulk)\s+(.+?)\s+convert\s+to\s+(png|jpg|jpeg|webp|pdf|tiff|bmp|gif)(?:\s+at\s+(.+))?$",
+            r"(?i)(batch|bulk)\s+(.+?)\s+convert\s+to\s+(png|jpg|jpeg|webp|pdf|tiff|bmp|gif)(?:\s+(?:at|in)\s+(.+))?$",
         )
         .unwrap();
 

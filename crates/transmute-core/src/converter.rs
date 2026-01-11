@@ -3,9 +3,7 @@ use std::path::{Path, PathBuf};
 use transmute_common::{Error, MediaFormat, PathManager, Result};
 use transmute_compress::{CompressionResult, ImageCompressor, QualitySettings};
 use transmute_formats::{ImageDecoder, ImageEncoder};
-use transmute_nlp::{
-    BatchIntent, CommandParser, CompressIntent, ConvertIntent, EnhanceIntent, Intent,
-};
+use transmute_nlp::{CommandParser, Intent};
 
 /// Main conversion engine
 pub struct Converter {
@@ -30,6 +28,20 @@ impl Converter {
     ) -> Result<PathBuf> {
         // Validate input
         self.path_manager.validate_input(input)?;
+
+        // Special handling for PDF conversion
+        if target_format == MediaFormat::Pdf {
+            let output_path = if let Some(out) = output {
+                out
+            } else {
+                // Generate PDF output path based on input
+                let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
+                let parent = input.parent().unwrap_or_else(|| Path::new("."));
+                parent.join(format!("{}.pdf", stem))
+            };
+
+            return self.images_to_pdf(vec![input.to_path_buf()], output_path, None);
+        }
 
         // Decode
         let (img, metadata) = ImageDecoder::decode(input)?;
