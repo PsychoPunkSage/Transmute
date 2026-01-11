@@ -4,7 +4,7 @@ members = [
     "crates/transmute-common",
     "crates/transmute-formats",
     "crates/transmute-core",
-    "crates/transmute-integration-tests", "crates/transmute-compress",
+    "crates/transmute-integration-tests", "crates/transmute-compress", "crates/transmute-nlp",
 ]
 
 [workspace.package]
@@ -19,6 +19,7 @@ num_cpus = "1.17.0"
 thiserror = "2.0"
 anyhow = "1.0"
 tracing = "0.1"
+glob = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Image processing
@@ -29,6 +30,10 @@ rayon = "1.10"
 wgpu = { version = "27.0.1", features = ["wgsl"] }
 bytemuck = { version = "1.14", features = ["derive"] }
 pollster = "0.4"
+
+# ONNX (cross-platform neural network format) Runtime for AI inference
+ort = { version = "2.0", features = ["cuda", "tensorrt"] }  # CUDA support
+ndarray = "0.16"  # N-dimensional arrays for tensor operations
 
 # File I/O
 memmap2 = "0.9"
@@ -58,7 +63,14 @@ webp = "0.3" # for modern compression
 # GPU compute
 naga = "23.0" # validates WGSL shaders at compile time
 
+# NLP parsing
+pest = "2.7" # provides PEG (Parsing Expression Grammar) parser generator for structured command parsing.
+pest_derive = "2.7"
+regex = "1.11" # pattern matching fallbacks
+shellexpand = "3.1" # resolves ~, $HOME, and environment variables in paths.
+
 # workspace crates
+transmute-nlp = { path = "crates/transmute-nlp" }
 transmute-core = { path = "crates/transmute-core" }
 transmute-common = { path = "crates/transmute-common" }
 transmute-formats = { path = "crates/transmute-formats" }

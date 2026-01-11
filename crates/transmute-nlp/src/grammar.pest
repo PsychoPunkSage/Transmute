@@ -1,0 +1,71 @@
+WHITESPACE = _{ " " | "\t" }
+
+// Top-level command
+command = { SOI ~ (convert_cmd | compress_cmd | enhance_cmd | batch_cmd) ~ EOI }
+
+// Convert command
+convert_cmd = { 
+    convert_verb ~ path ~ to_prep ~ format ~ (at_prep ~ output_path)?
+}
+
+convert_verb = _{ ^"convert" | ^"change" | ^"transform" }
+to_prep = _{ ^"to" | ^"into" }
+at_prep = _{ ^"at" | ^"in" | ^"to" }
+
+// Compress command
+compress_cmd = {
+    compress_verb ~ path ~ (to_prep ~ format)? ~ 
+    (quality_spec)? ~ (at_prep ~ output_path)?
+}
+
+compress_verb = _{ ^"compress" | ^"reduce" | ^"optimize" | ^"shrink" }
+quality_spec = { 
+    (^"to" | ^"at" | ^"with")? ~ 
+    (percentage | quality_preset) ~ 
+    (^"quality" | ^"size")?
+}
+
+// Enhance command
+enhance_cmd = {
+    enhance_verb ~ path ~ (scale_spec)? ~ (at_prep ~ output_path)?
+}
+
+enhance_verb = _{ ^"enhance" | ^"upscale" | ^"improve" | ^"enlarge" }
+scale_spec = { 
+    (^"by" | ^"to")? ~ scale_factor ~ (^"x" | ^"times")?
+}
+
+// Batch command
+batch_cmd = {
+    batch_verb ~ path_pattern ~ convert_verb ~ to_prep ~ format ~ 
+    (at_prep ~ output_path)?
+}
+
+batch_verb = _{ ^"batch" | ^"bulk" | ^"convert all" }
+
+// Formats
+format = { 
+    ^"png" | ^"jpg" | ^"jpeg" | ^"webp" | ^"pdf" | 
+    ^"tiff" | ^"tif" | ^"bmp" | ^"gif"
+}
+
+// Quality
+quality_preset = { 
+    ^"maximum" | ^"max" | ^"high" | ^"medium" | ^"balanced" | ^"low" 
+}
+percentage = { ASCII_DIGIT+ ~ "%" }
+
+// Scale factor
+scale_factor = { ("2" | "4") }
+
+// Paths
+path = @{ quoted_path | unquoted_path }
+output_path = @{ quoted_path | unquoted_path }
+path_pattern = @{ quoted_path | unquoted_path }
+
+quoted_path = _{ "\"" ~ (!("\"") ~ ANY)+ ~ "\"" | "'" ~ (!("'") ~ ANY)+ ~ "'" }
+unquoted_path = _{ path_char+ }
+path_char = _{
+    ASCII_ALPHANUMERIC | "/" | "\\" | "." | "-" | "_" | 
+    "~" | "$" | "{" | "}" | "*"
+}
