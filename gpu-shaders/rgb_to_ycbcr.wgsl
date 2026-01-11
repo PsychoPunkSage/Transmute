@@ -7,8 +7,8 @@ struct ImageParams {
 }
 
 @group(0) @binding(0) var<uniform> params: ImageParams;
-@group(0) @binding(1) var<storage, read> input_rgb: array<u32>;  // Packed RGB888 = 0xRRGGBB = [8 bits Red] + [8 bits Green] + [8 bits Blue] = 32 bit = 1 pixel color
-@group(0) @binding(2) var<storage, read_write> output_ycbcr: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> input_rgb: array<vec4<u32>>;  // RGBA as 4 u8 packed efficiently
+@group(0) @binding(2) var<storage, read_write> output_ycbcr: array<vec4<u32>>;  // Output as u32 packed - skip f32 entirely
 
 // ITU-R BT.601 conversion matrix (JPEG standard)
 fn rgb_to_ycbcr(rgb: vec3<f32>) -> vec3<f32> {
@@ -24,23 +24,26 @@ fn rgb_to_ycbcr(rgb: vec3<f32>) -> vec3<f32> {
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let x = global_id.x;
     let y = global_id.y;
-    
+
     // Bounds check
     if (x >= params.width || y >= params.height) {
         return;
     }
-    
+
     let pixel_index = y * params.width + x;
-    
-    // Unpack RGB from u32 (assumes RGB888 format: 0xRRGGBB)
-    let packed = input_rgb[pixel_index];
-    let r = f32((packed >> 16u) & 0xFFu);
-    let g = f32((packed >> 8u) & 0xFFu);
-    let b = f32(packed & 0xFFu);
-    
-    let rgb = vec3<f32>(r, g, b);
-    let ycbcr = rgb_to_ycbcr(rgb);
-    
-    // Write YCbCr values
-    output_ycbcr[pixel_index] = vec4<f32>(ycbcr, 1.0);
+
+    // Read RGBA directly as vec4<u32> (each component 0-255)
+    let rgba = input_rgb[pixel_index];
+
+    // Convert to f32 for processing
+    let rgb = vec3<f32>(f32(rgba.r), f32(rgba.g), f32(rgba.b));
+    let ycbcr_f = rgb_to_ycbcr(rgb);
+
+    // Clamp and convert back to u32 - output as u8 values in u32
+    let y_u = u32(clamp(ycbcr_f.x, 0.0, 255.0));
+    let cb_u = u32(clamp(ycbcr_f.y, 0.0, 255.0));
+    let cr_u = u32(clamp(ycbcr_f.z, 0.0, 255.0));
+
+    // Pack as vec4<u32> - matches u8 layout expected by mozjpeg
+    output_ycbcr[pixel_index] = vec4<u32>(y_u, cb_u, cr_u, 0u);
 }
