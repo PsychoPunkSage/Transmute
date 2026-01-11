@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use transmute_common::{Error, MediaFormat, PathManager, Result};
+use transmute_compress::{CompressionResult, ImageCompressor, QualitySettings};
 use transmute_formats::{ImageDecoder, ImageEncoder};
 
 /// Main conversion engine
@@ -155,6 +156,65 @@ impl Converter {
 
         tracing::info!("Saved {} images to {:?}", output_paths.len(), output_dir);
         Ok(output_paths)
+    }
+
+    /// Compress image with quality control
+    pub fn compress_image(
+        &self,
+        input: &Path,
+        target_format: MediaFormat,
+        quality: QualitySettings,
+        output: Option<PathBuf>,
+    ) -> Result<(PathBuf, CompressionResult)> {
+        use transmute_formats::ImageDecoder;
+
+        // Validate and decode
+        self.path_manager.validate_input(input)?;
+        let (img, metadata) = ImageDecoder::decode(input)?;
+
+        tracing::info!(
+            "Compressing {}x{} {} → {} (quality: {:?})",
+            metadata.width,
+            metadata.height,
+            metadata.format,
+            target_format,
+            quality
+        );
+
+        // Create compressor with GPU if enabled
+        let compressor = ImageCompressor::new(self.use_gpu)?;
+
+        // Generate output path
+        let output_path =
+            self.path_manager
+                .generate_unique_path(input, target_format.extension(), output)?;
+
+        // Compress to file
+        let result = compressor.compress_to_file(&img, &output_path, target_format, quality)?;
+
+        tracing::info!(
+            "Compression complete: {:.1}% size reduction (ratio: {:.2}x)",
+            result.size_reduction_percent(),
+            result.ratio
+        );
+
+        Ok((output_path, result))
+    }
+
+    /// Batch compress with progress tracking
+    pub async fn compress_batch(
+        &self,
+        inputs: Vec<PathBuf>,
+        target_format: MediaFormat,
+        quality: QualitySettings,
+        output_dir: Option<PathBuf>,
+    ) -> Vec<Result<(PathBuf, CompressionResult)>> {
+        use rayon::prelude::*;
+
+        inputs
+            .par_iter()
+            .map(|input| self.compress_image(input, target_format, quality, output_dir.clone()))
+            .collect()
     }
 }
 

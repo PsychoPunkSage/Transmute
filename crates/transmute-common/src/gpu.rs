@@ -1,4 +1,4 @@
-use transmute_common::{Error, Result};
+use crate::{Error, Result};
 use wgpu::{AdapterInfo, Device, Instance, PowerPreference, Queue, RequestAdapterOptions};
 
 /// GPU context manager with automatic fallback
@@ -17,11 +17,13 @@ impl GpuContext {
     async fn new_async() -> Result<Self> {
         tracing::info!("Initializing GPU context...");
 
+        // 1. List out all the GPU device
         let instance = Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
 
+        // 2. Get the STRONGEST Adapter/GPU
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
                 power_preference: PowerPreference::HighPerformance,
