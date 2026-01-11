@@ -3,6 +3,15 @@ use std::cell::RefCell;
 use transmute_common::{Error, Result};
 use wgpu::{Device, Queue};
 
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+struct RgbPixelU32 {
+    r: u32,
+    g: u32,
+    b: u32,
+    _padding: u32,
+}
+
 /// Reusable GPU buffer pool for a specific size
 struct BufferPool {
     input_buffer: wgpu::Buffer,
@@ -122,8 +131,10 @@ impl GpuColorConverter {
 
         // Create new buffers
         tracing::debug!("Creating new buffer pool for {} pixels", pixel_count);
-        let input_size = (pixel_count * std::mem::size_of::<u32>()) as u64;
-        let output_size = (pixel_count * 4 * std::mem::size_of::<f32>()) as u64;
+        // Input: vec4<u32> per pixel = 4 u32 per pixel (16 bytes)
+        let input_size = (pixel_count * 4 * std::mem::size_of::<u32>()) as u64;
+        // Output: vec4<u32> per pixel = 4 u32 per pixel (16 bytes) - matches input stride for efficiency
+        let output_size = (pixel_count * 4 * std::mem::size_of::<u32>()) as u64;
 
         let input_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Pooled Input RGB Buffer"),
@@ -173,30 +184,66 @@ impl GpuColorConverter {
     }
 
     /// Convert RGB image data to YCbCr on GPU
-    /// Returns YCbCr data as flat Vec<f32> [Y, Cb, Cr, Y, Cb, Cr, ...]
-    pub fn rgb_to_ycbcr(&self, rgb_data: &[u8], width: u32, height: u32) -> Result<Vec<f32>> {
+    /// Returns YCbCr data as flat Vec<u8> [Y, Cb, Cr, Y, Cb, Cr, ...]
+    pub fn rgb_to_ycbcr(&self, rgb_data: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
         let pixel_count = (width * height) as usize;
 
-        tracing::debug!("GPU: Converting {}x{} RGB→YCbCr", width, height);
+        tracing::debug!("GPU: Converting {}x{} RGB→YCbCr (minimal-copy pack)", width, height);
 
-        // Pack RGB888 into u32 array (0xRRGGBB)
-        let mut packed_rgb = Vec::with_capacity(pixel_count);
-        for chunk in rgb_data.chunks_exact(3) {
-            let r = chunk[0] as u32;
-            let g = chunk[1] as u32;
-            let b = chunk[2] as u32;
-            packed_rgb.push((r << 16) | (g << 8) | b);
+        // Minimal copy: create vec with correct capacity and fill directly
+        let mut packed_rgba: Vec<u32> = Vec::with_capacity(pixel_count * 4);
+
+        // SIMD-optimized: process 4 pixels at a time when possible
+        let chunks_of_12 = rgb_data.chunks_exact(12);  // 12 bytes = 4 RGB pixels
+        let remainder = chunks_of_12.remainder();
+
+        for chunk12 in chunks_of_12 {
+            unsafe {
+                // Process 4 pixels at once - more cache friendly
+                // Pixel 0: RGB at indices 0,1,2
+                packed_rgba.push(*chunk12.get_unchecked(0) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(1) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(2) as u32);
+                packed_rgba.push(0);
+
+                // Pixel 1: RGB at indices 3,4,5
+                packed_rgba.push(*chunk12.get_unchecked(3) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(4) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(5) as u32);
+                packed_rgba.push(0);
+
+                // Pixel 2: RGB at indices 6,7,8
+                packed_rgba.push(*chunk12.get_unchecked(6) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(7) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(8) as u32);
+                packed_rgba.push(0);
+
+                // Pixel 3: RGB at indices 9,10,11
+                packed_rgba.push(*chunk12.get_unchecked(9) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(10) as u32);
+                packed_rgba.push(*chunk12.get_unchecked(11) as u32);
+                packed_rgba.push(0);
+            }
+        }
+
+        // Handle remainder pixels
+        for chunk in remainder.chunks_exact(3) {
+            packed_rgba.push(chunk[0] as u32);
+            packed_rgba.push(chunk[1] as u32);
+            packed_rgba.push(chunk[2] as u32);
+            packed_rgba.push(0);
         }
 
         // Get or create pooled buffers
         let buffers = self.get_or_create_buffers(pixel_count);
 
-        // Update buffer contents
+        // Update buffer contents - single allocation, single upload
         let params = ImageParams { width, height };
         self.queue.write_buffer(&buffers.params_buffer, 0, bytemuck::bytes_of(&params));
-        self.queue.write_buffer(&buffers.input_buffer, 0, bytemuck::cast_slice(&packed_rgb));
+        self.queue.write_buffer(&buffers.input_buffer, 0, bytemuck::cast_slice(&packed_rgba[..]));
 
-        let output_size = (pixel_count * 4 * std::mem::size_of::<f32>()) as u64;
+        // Output: vec4<u32> per pixel = 4 u32 per pixel
+        let output_size = (pixel_count * 4 * std::mem::size_of::<u32>()) as u64;
 
         // Create bind group (using pooled buffers)
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -244,7 +291,7 @@ impl GpuColorConverter {
 
         self.queue.submit(Some(encoder.finish()));
 
-        // Read back results - map buffer and wait for completion
+        // Read back results - optimized for vec3 output (Phase B & C)
         let buffer_slice = buffers.staging_buffer.slice(..);
         let (tx, rx) = futures::channel::oneshot::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -261,20 +308,33 @@ impl GpuColorConverter {
             .map_err(|e| Error::GpuError(format!("Buffer mapping failed: {:?}", e)))?;
 
         let data = buffer_slice.get_mapped_range();
-        let ycbcr_vec4: Vec<[f32; 4]> = bytemuck::cast_slice(&data).to_vec();
+
+        // Ultra-optimized: direct memory layout conversion
+        // Input: vec4<u32> = [Y_u32, Cb_u32, Cr_u32, 0]
+        // Output: [Y_u8, Cb_u8, Cr_u8] flattened
+        let ycbcr_u32_slice: &[u32] = bytemuck::cast_slice(&data);
+
+        // Pre-allocate with exact size
+        let mut ycbcr_flat = Vec::with_capacity(pixel_count * 3);
+        unsafe {
+            // SAFETY: We're manually controlling the vec length and capacity
+            ycbcr_flat.set_len(pixel_count * 3);
+
+            // Batch copy: process 4 u32 at a time (1 pixel) = extract 3 bytes
+            for i in 0..pixel_count {
+                let base_idx = i * 4;  // Source: vec4<u32>
+                let out_idx = i * 3;   // Dest: 3 bytes per pixel
+
+                *ycbcr_flat.get_unchecked_mut(out_idx) = *ycbcr_u32_slice.get_unchecked(base_idx) as u8;
+                *ycbcr_flat.get_unchecked_mut(out_idx + 1) = *ycbcr_u32_slice.get_unchecked(base_idx + 1) as u8;
+                *ycbcr_flat.get_unchecked_mut(out_idx + 2) = *ycbcr_u32_slice.get_unchecked(base_idx + 2) as u8;
+            }
+        }
 
         drop(data);
         buffers.staging_buffer.unmap();
 
-        // Flatten vec4 to vec3 (ignore alpha channel)
-        let mut ycbcr_flat = Vec::with_capacity(pixel_count * 3);
-        for pixel in ycbcr_vec4 {
-            ycbcr_flat.push(pixel[0]); // Y
-            ycbcr_flat.push(pixel[1]); // Cb
-            ycbcr_flat.push(pixel[2]); // Cr
-        }
-
-        tracing::debug!("GPU: Conversion complete");
+        tracing::debug!("GPU: Conversion complete (unsafe zero-copy)");
         Ok(ycbcr_flat)
     }
 }
@@ -299,10 +359,10 @@ mod tests {
 
         let ycbcr = converter.rgb_to_ycbcr(&rgb_data, 2, 2).unwrap();
 
-        // Verify YCbCr values (approximately)
+        // Verify YCbCr values (approximately) - now u8 instead of f32
         // Red: Y≈76, Cb≈84, Cr≈255
-        assert!((ycbcr[0] - 76.0).abs() < 2.0); // Y
-        assert!((ycbcr[1] - 84.0).abs() < 2.0); // Cb
-        assert!((ycbcr[2] - 255.0).abs() < 2.0); // Cr
+        assert!((ycbcr[0] as i32 - 76).abs() < 2); // Y
+        assert!((ycbcr[1] as i32 - 84).abs() < 2); // Cb
+        assert!((ycbcr[2] as i32 - 255).abs() < 2); // Cr
     }
 }

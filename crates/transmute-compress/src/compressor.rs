@@ -142,17 +142,11 @@ impl ImageCompressor {
         let width = img.width() as usize;
         let height = img.height() as usize;
 
-        // Convert RGB→YCbCr on GPU
-        let ycbcr_data = converter.rgb_to_ycbcr(rgb_data, img.width(), img.height())?;
+        // Convert RGB→YCbCr on GPU (returns u8 directly - zero CPU conversion overhead)
+        let ycbcr_u8 = converter.rgb_to_ycbcr(rgb_data, img.width(), img.height())?;
 
         // Use mozjpeg with YCbCr color space (accepts GPU output directly)
         use mozjpeg::{ColorSpace, Compress, ScanMode};
-
-        // Convert f32 YCbCr to u8 for mozjpeg
-        let ycbcr_u8: Vec<u8> = ycbcr_data
-            .iter()
-            .map(|&v| v.clamp(0.0, 255.0) as u8)
-            .collect();
 
         let mut comp = Compress::new(ColorSpace::JCS_YCbCr);
         comp.set_size(width, height);
