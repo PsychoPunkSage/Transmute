@@ -47,7 +47,7 @@ chrono = "0.4"
 criterion = { version = "0.8", features = ["html_reports"] }
 
 # PDF Support
-printpdf = { version = "0.8", features = ["png"] } # PDF Generation with PNG support
+printpdf = { version = "0.8", features = ["png", "jpeg"] } # PDF Generation with PNG and JPEG support
 lopdf = "0.38" # low level PDF Manipulation
 pdfium-render = "0.8" # GPU accelerated-rasterization
 
