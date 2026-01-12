@@ -290,6 +290,17 @@ impl Converter {
 
                 Ok(outputs)
             }
+
+            Intent::CombineToPdf(combine) => {
+                tracing::info!(
+                    "Combining {} images into PDF: {:?}",
+                    combine.inputs.len(),
+                    combine.output
+                );
+
+                let output = self.images_to_pdf(combine.inputs, combine.output, None)?;
+                Ok(vec![output])
+            }
         }
     }
 }
