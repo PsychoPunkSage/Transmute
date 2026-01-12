@@ -33,10 +33,11 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Convert image format
+    /// Convert image format (supports multiple inputs for PDF)
     Convert {
-        /// Input file path
-        input: PathBuf,
+        /// Input file path(s) - multiple files allowed for PDF output
+        #[arg(required = true)]
+        input: Vec<PathBuf>,
 
         /// Target format (png, jpg, webp, pdf, etc.)
         #[arg(short = 'f', long)]

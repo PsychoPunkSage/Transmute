@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
 }
 
 fn handle_convert(
-    input: PathBuf,
+    inputs: Vec<PathBuf>,
     format_str: String,
     output: Option<PathBuf>,
     config: &Config,
@@ -109,10 +109,38 @@ fn handle_convert(
     let mut converter = Converter::new()?;
     converter.set_gpu_enabled(config.use_gpu);
 
-    let output_path = converter.convert_image(&input, format, output)?;
+    // Special handling for multi-image PDF conversion
+    if format == MediaFormat::Pdf && inputs.len() > 1 {
+        let output_path = output.ok_or_else(|| {
+            anyhow::anyhow!("Output path required for multi-image PDF conversion")
+        })?;
+
+        let result = converter.images_to_pdf(inputs.clone(), output_path, None)?;
+
+        ProgressReporter::finish_bar(&spinner, "Done");
+        formatter.success(&format!(
+            "Created {}-page PDF: {}",
+            inputs.len(),
+            formatter.format_path(&result)
+        ));
+
+        return Ok(());
+    }
+
+    // Single image conversion
+    if inputs.len() != 1 {
+        anyhow::bail!(
+            "Multiple inputs only supported for PDF output. Got {} inputs for {}",
+            inputs.len(),
+            format_str
+        );
+    }
+
+    let input = &inputs[0];
+    let output_path = converter.convert_image(input, format, output)?;
 
     ProgressReporter::finish_bar(&spinner, "Done");
-    formatter.print_conversion(&input, &output_path, format);
+    formatter.print_conversion(input, &output_path, format);
 
     Ok(())
 }
