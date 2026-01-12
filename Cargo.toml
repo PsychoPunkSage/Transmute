@@ -81,7 +81,7 @@ serde = { version = "1.0", features = ["derive"] }
 eframe = "0.30" # provides the application framework
 egui = "0.30" # immediate-mode GUI library
 egui_extras = { version = "0.30", features = ["image"] } # adds image rendering
-rfd = { version = "0.16", default-features = false, features = ["gtk3"] }  # provides native file picker dialogs (cross-platform)
+rfd = "0.17"  # provides native file picker dialogs (cross-platform)
 parking_lot = "0.12" # efficient mutexes. (smaller + faster)
 
 # workspace crates
