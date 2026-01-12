@@ -1,0 +1,32 @@
+[package]
+name = "transmute-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "transmute-gui"
+path = "src/main.rs"
+
+[dependencies]
+transmute-common = { path = "../transmute-common" }
+transmute-core = { path = "../transmute-core" }
+transmute-compress = { path = "../transmute-compress" }
+transmute-nlp = { path = "../transmute-nlp" }
+
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+rfd.workspace = true
+parking_lot.workspace = true
+
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+image.workspace = true
+
+[build-dependencies]
+winres = "0.1"
+
