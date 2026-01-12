@@ -20,17 +20,25 @@ Transmute is a high-performance media conversion tool that processes images and 
 - **Privacy-First**: Zero network I/O, all processing happens locally
 - **Configurable**: Persistent settings with TOML configuration file
 
+## Screenshots
+
+### User Interface
+
+![Transmute GUI](./images/UI.png)
+
+The Transmute GUI provides an intuitive interface for media conversion with drag-and-drop support, real-time progress tracking, and easy configuration management.
+
 ## Supported Formats
 
-| Format | Input | Output | Compression | Notes |
-|--------|-------|--------|-------------|-------|
-| PNG    | Yes   | Yes    | Lossless    | Optimized with oxipng |
+| Format | Input | Output | Compression | Notes                              |
+| ------ | ----- | ------ | ----------- | ---------------------------------- |
+| PNG    | Yes   | Yes    | Lossless    | Optimized with oxipng              |
 | JPEG   | Yes   | Yes    | Lossy       | High-quality encoding with mozjpeg |
-| WebP   | Yes   | Yes    | Both        | Modern compression format |
-| TIFF   | Yes   | Yes    | Both        | Supports multi-page documents |
-| BMP    | Yes   | Yes    | Lossless    | Uncompressed bitmap format |
-| GIF    | Yes   | Yes    | Lossless    | Animated GIF support |
-| PDF    | Yes   | Yes    | Document    | GPU-accelerated rasterization |
+| WebP   | Yes   | Yes    | Both        | Modern compression format          |
+| TIFF   | Yes   | Yes    | Both        | Supports multi-page documents      |
+| BMP    | Yes   | Yes    | Lossless    | Uncompressed bitmap format         |
+| GIF    | Yes   | Yes    | Lossless    | Animated GIF support               |
+| PDF    | Yes   | Yes    | Document    | GPU-accelerated rasterization      |
 
 ## Installation
 
@@ -101,6 +109,7 @@ cargo build --release
 ```
 
 Binaries will be available at:
+
 - CLI: `target/release/transmute`
 - GUI: `target/release/transmute-gui`
 
@@ -230,18 +239,21 @@ transmute-gui
 Transmute automatically detects available GPU backends:
 
 **Priority Order**:
+
 1. **Vulkan** (Linux, Windows, Android)
 2. **Metal** (macOS, iOS)
 3. **DirectX 12** (Windows 10+)
 4. **OpenGL** (Fallback for older systems)
 
 **When GPU acceleration helps most**:
+
 - Images larger than 2MP (1920x1080)
 - Batch processing 10+ images
 - PDF generation with many pages
 - Color space conversions (YCbCr, CMYK)
 
 **Disable GPU if**:
+
 - Running on systems without dedicated GPU
 - Experiencing driver compatibility issues
 - Processing small images (<500KB)
@@ -257,6 +269,7 @@ transmute config set use_gpu false
 ## Configuration
 
 Configuration file location:
+
 - **Linux**: `~/.config/transmute/config.toml`
 - **macOS**: `~/Library/Application Support/transmute/config.toml`
 - **Windows**: `%APPDATA%\transmute\config.toml`
