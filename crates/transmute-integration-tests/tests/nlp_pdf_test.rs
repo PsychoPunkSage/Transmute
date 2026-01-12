@@ -1,6 +1,4 @@
 // Integration test for NLP parser PDF conversion
-use std::path::PathBuf;
-use tempfile::TempDir;
 use transmute_common::MediaFormat;
 use transmute_nlp::{CommandParser, Intent};
 

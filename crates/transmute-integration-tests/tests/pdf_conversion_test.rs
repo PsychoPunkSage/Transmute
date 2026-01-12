@@ -1,6 +1,5 @@
 // Integration test for PDF conversion functionality
 use image::DynamicImage;
-use std::path::PathBuf;
 use tempfile::TempDir;
 use transmute_common::MediaFormat;
 use transmute_core::Converter;
