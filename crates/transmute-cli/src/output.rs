@@ -1,4 +1,4 @@
-use console::{style, Style};
+use console::style;
 use std::path::Path;
 use transmute_common::MediaFormat;
 
