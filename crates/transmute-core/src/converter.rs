@@ -98,14 +98,23 @@ impl Converter {
             self.path_manager.validate_input(input)?;
         }
 
-        // Decode all images
+        // Decode all images in parallel, preserving order
+        // Note: Parallel processing significantly speeds up I/O-bound image loading
+        let decode_results: Vec<Result<(image::DynamicImage, PathBuf)>> = input_images
+            .par_iter()
+            .map(|input_path| {
+                let (img, _metadata) = ImageDecoder::decode(input_path)?;
+                Ok((img, input_path.clone()))
+            })
+            .collect();
+
+        // Collect results, propagating any errors
         let mut images_with_paths = Vec::new();
-        for input_path in input_images {
-            let (img, _metadata) = ImageDecoder::decode(&input_path)?;
-            images_with_paths.push((img, input_path));
+        for result in decode_results {
+            images_with_paths.push(result?);
         }
 
-        // Generate PDF
+        // Generate PDF (must be sequential - PDF spec requires ordered assembly)
         let options = pdf_options.unwrap_or_default();
         let generator = PdfGenerator::new(options);
         generator.generate_from_images(images_with_paths, &output)?;
