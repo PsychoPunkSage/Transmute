@@ -1,5 +1,4 @@
 use image::DynamicImage;
-use std::fs;
 use tempfile::TempDir;
 use transmute_common::MediaFormat;
 use transmute_core::Converter;

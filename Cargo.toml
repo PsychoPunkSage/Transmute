@@ -4,7 +4,7 @@ members = [
     "crates/transmute-common",
     "crates/transmute-formats",
     "crates/transmute-core",
-    "crates/transmute-integration-tests", "crates/transmute-compress", "crates/transmute-nlp", "crates/transmute-cli",
+    "crates/transmute-integration-tests", "crates/transmute-compress", "crates/transmute-nlp", "crates/transmute-cli", "crates/transmute-gui",
 ]
 
 [workspace.package]
@@ -77,6 +77,13 @@ crossterm = "0.28"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 
+# GUI
+eframe = "0.30" # provides the application framework
+egui = "0.30" # immediate-mode GUI library
+egui_extras = { version = "0.30", features = ["image"] } # adds image rendering
+rfd = { version = "0.16", default-features = false, features = ["gtk3"] }  # provides native file picker dialogs (cross-platform)
+parking_lot = "0.12" # efficient mutexes. (smaller + faster)
+
 # workspace crates
 transmute-nlp = { path = "crates/transmute-nlp" }
 transmute-core = { path = "crates/transmute-core" }
@@ -93,3 +100,4 @@ panic = "abort"
 
 [profile.bench]
 inherits = "release"
+

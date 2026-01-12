@@ -184,12 +184,12 @@ fn handle_compress(
 }
 
 fn handle_enhance(
-    input: PathBuf,
+    _input: PathBuf,
     scale: u32,
-    output: Option<PathBuf>,
-    config: &Config,
+    _output: Option<PathBuf>,
+    _config: &Config,
     formatter: &OutputFormatter,
-    progress: &ProgressReporter,
+    _progress: &ProgressReporter,
 ) -> Result<()> {
     if scale != 2 && scale != 4 {
         anyhow::bail!("Scale factor must be 2 or 4");

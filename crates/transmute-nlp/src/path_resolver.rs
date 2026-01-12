@@ -107,7 +107,7 @@ impl PathResolver {
         tracing::debug!("Glob pattern: {}", pattern_str);
 
         let mut matches = Vec::new();
-        for entry in glob(&pattern_str).map_err(|e| Error::InvalidPath(resolved_pattern.clone()))? {
+        for entry in glob(&pattern_str).map_err(|_e| Error::InvalidPath(resolved_pattern.clone()))? {
             match entry {
                 Ok(path) => {
                     if path.is_file() {
