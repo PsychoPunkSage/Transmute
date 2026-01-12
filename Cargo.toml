@@ -4,7 +4,7 @@ members = [
     "crates/transmute-common",
     "crates/transmute-formats",
     "crates/transmute-core",
-    "crates/transmute-integration-tests", "crates/transmute-compress", "crates/transmute-nlp",
+    "crates/transmute-integration-tests", "crates/transmute-compress", "crates/transmute-nlp", "crates/transmute-cli",
 ]
 
 [workspace.package]
@@ -47,7 +47,7 @@ chrono = "0.4"
 criterion = { version = "0.8", features = ["html_reports"] }
 
 # PDF Support
-printpdf = { version = "0.8", features = ["png"] } # PDF Generation with PNG support
+printpdf = { version = "0.8", features = ["png", "jpeg"] } # PDF Generation with PNG and JPEG support
 lopdf = "0.38" # low level PDF Manipulation
 pdfium-render = "0.8" # GPU accelerated-rasterization
 
@@ -68,6 +68,14 @@ pest = "2.7" # provides PEG (Parsing Expression Grammar) parser generator for st
 pest_derive = "2.7"
 regex = "1.11" # pattern matching fallbacks
 shellexpand = "3.1" # resolves ~, $HOME, and environment variables in paths.
+
+# CLI
+clap = { version = "4.5", features = ["derive", "cargo", "env"] }
+indicatif = "0.17"
+console = "0.15"
+crossterm = "0.28"
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
 
 # workspace crates
 transmute-nlp = { path = "crates/transmute-nlp" }

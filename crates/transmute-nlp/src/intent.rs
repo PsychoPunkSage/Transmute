@@ -8,6 +8,7 @@ pub enum Intent {
     Compress(CompressIntent),
     Enhance(EnhanceIntent),
     Batch(BatchIntent),
+    CombineToPdf(CombineToPdfIntent),
 }
 
 /// Convert one format to another
@@ -79,6 +80,13 @@ pub struct BatchIntent {
     pub output: Option<PathBuf>,
 }
 
+/// Combine multiple images into a single PDF
+#[derive(Debug, Clone, PartialEq)]
+pub struct CombineToPdfIntent {
+    pub inputs: Vec<PathBuf>,
+    pub output: PathBuf,
+}
+
 impl Intent {
     /// Get input path from any intent
     pub fn input_path(&self) -> Option<&PathBuf> {
@@ -87,6 +95,7 @@ impl Intent {
             Self::Compress(i) => Some(&i.input),
             Self::Enhance(i) => Some(&i.input),
             Self::Batch(_) => None, // Batch uses pattern
+            Self::CombineToPdf(i) => i.inputs.first(), // Return first input
         }
     }
 
@@ -97,6 +106,7 @@ impl Intent {
             Self::Compress(i) => i.output.as_ref(),
             Self::Enhance(i) => i.output.as_ref(),
             Self::Batch(i) => i.output.as_ref(),
+            Self::CombineToPdf(i) => Some(&i.output),
         }
     }
 }

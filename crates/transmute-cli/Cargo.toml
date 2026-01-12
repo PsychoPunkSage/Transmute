@@ -1,0 +1,34 @@
+[package]
+name = "transmute-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "transmute"
+path = "src/main.rs"
+
+[dependencies]
+transmute-common = { path = "../transmute-common" }
+transmute-core = { path = "../transmute-core" }
+transmute-compress = { path = "../transmute-compress" }
+transmute-nlp = { path = "../transmute-nlp" }
+
+clap.workspace = true
+indicatif.workspace = true
+console.workspace = true
+crossterm.workspace = true
+toml.workspace = true
+serde.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+
+directories.workspace = true
+num_cpus.workspace = true
+
+[build-dependencies]
+clap = { workspace = true }
+clap_complete = "4.5"

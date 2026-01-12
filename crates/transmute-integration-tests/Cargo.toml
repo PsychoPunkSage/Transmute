@@ -9,6 +9,7 @@ transmute-common.workspace = true
 transmute-core.workspace = true
 transmute-compress.workspace = true
 transmute-formats.workspace = true
+transmute-nlp.workspace = true
 image.workspace = true
 tokio.workspace = true
 tempfile = "3.14"
