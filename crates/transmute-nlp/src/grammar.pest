@@ -1,7 +1,7 @@
 WHITESPACE = _{ " " | "\t" }
 
 // Top-level command
-command = { SOI ~ (convert_cmd | compress_cmd | enhance_cmd | batch_cmd) ~ EOI }
+command = { SOI ~ (convert_cmd | compress_cmd | enhance_cmd | batch_cmd | combine_pdf_cmd) ~ EOI }
 
 // Convert command
 convert_cmd = { 
@@ -37,11 +37,21 @@ scale_spec = {
 
 // Batch command
 batch_cmd = {
-    batch_verb ~ path_pattern ~ convert_verb ~ to_prep ~ format ~ 
+    batch_verb ~ path_pattern ~ convert_verb ~ to_prep ~ format ~
     (at_prep ~ output_path)?
 }
 
 batch_verb = _{ ^"batch" | ^"bulk" | ^"convert all" }
+
+// Combine to PDF command
+combine_pdf_cmd = {
+    combine_verb ~ path ~ (path)+ ~ (to_prep | into_prep)? ~ pdf_format ~
+    (at_prep ~ output_path)?
+}
+
+combine_verb = _{ ^"combine" | ^"merge" | ^"join" | ^"concatenate" }
+into_prep = _{ ^"into" }
+pdf_format = _{ ^"pdf" }
 
 // Formats
 format = { 

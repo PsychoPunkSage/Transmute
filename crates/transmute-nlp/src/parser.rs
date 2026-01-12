@@ -49,6 +49,7 @@ impl CommandParser {
                 Rule::compress_cmd => return self.parse_compress(pair),
                 Rule::enhance_cmd => return self.parse_enhance(pair),
                 Rule::batch_cmd => return self.parse_batch(pair),
+                Rule::combine_pdf_cmd => return self.parse_combine_pdf(pair),
                 _ => {}
             }
         }
@@ -193,6 +194,37 @@ impl CommandParser {
             target_format,
             output,
         }))
+    }
+
+    fn parse_combine_pdf(&self, pair: pest::iterators::Pair<Rule>) -> Result<Intent> {
+        let mut inputs = Vec::new();
+        let mut output = None;
+
+        for inner in pair.into_inner() {
+            match inner.as_rule() {
+                Rule::path => {
+                    let path_str = inner.as_str().trim_matches(|c| c == '"' || c == '\'');
+                    inputs.push(self.path_resolver.resolve(path_str)?);
+                }
+                Rule::output_path => {
+                    let path_str = inner.as_str().trim_matches(|c| c == '"' || c == '\'');
+                    output = Some(self.path_resolver.resolve(path_str)?);
+                }
+                _ => {}
+            }
+        }
+
+        if inputs.len() < 2 {
+            return Err(Error::ConversionError(
+                "Combine PDF requires at least 2 input files".into(),
+            ));
+        }
+
+        let output = output.ok_or_else(|| {
+            Error::ConversionError("Output path required for combine PDF operation".into())
+        })?;
+
+        Ok(Intent::CombineToPdf(CombineToPdfIntent { inputs, output }))
     }
 
     fn parse_quality(&self, pair: pest::iterators::Pair<Rule>) -> Result<QualitySpec> {
@@ -387,6 +419,66 @@ impl CommandParser {
                 target_format: format,
                 output,
             }));
+        }
+
+        // Combine to PDF pattern: "combine <path1> <path2> ... into pdf"
+        // This regex captures multiple file paths separated by spaces
+        let combine_pdf_re = Regex::new(
+            r"(?i)(combine|merge|join)\s+(.+?)\s+(?:into|to)\s+pdf(?:\s+(?:at|in|as)\s+(.+))?$",
+        )
+        .unwrap();
+
+        if let Some(caps) = combine_pdf_re.captures(command) {
+            let paths_str = caps.get(2).unwrap().as_str();
+
+            // Split by spaces but respect quoted paths
+            let mut inputs = Vec::new();
+            let mut current_path = String::new();
+            let mut in_quotes = false;
+            let mut quote_char = '\0';
+
+            for ch in paths_str.chars() {
+                if (ch == '"' || ch == '\'') && !in_quotes {
+                    in_quotes = true;
+                    quote_char = ch;
+                } else if ch == quote_char && in_quotes {
+                    in_quotes = false;
+                    if !current_path.is_empty() {
+                        inputs.push(self.path_resolver.resolve(current_path.trim())?);
+                        current_path.clear();
+                    }
+                } else if ch.is_whitespace() && !in_quotes {
+                    if !current_path.is_empty() {
+                        inputs.push(self.path_resolver.resolve(current_path.trim())?);
+                        current_path.clear();
+                    }
+                } else {
+                    current_path.push(ch);
+                }
+            }
+
+            // Don't forget the last path
+            if !current_path.is_empty() {
+                inputs.push(self.path_resolver.resolve(current_path.trim())?);
+            }
+
+            if inputs.len() < 2 {
+                return Err(Error::ConversionError(
+                    "Combine PDF requires at least 2 input files".into(),
+                ));
+            }
+
+            let output = if let Some(out_match) = caps.get(3) {
+                let out_str = out_match.as_str().trim();
+                let out_str = out_str.trim_matches(|c| c == '"' || c == '\'');
+                self.path_resolver.resolve(out_str)?
+            } else {
+                return Err(Error::ConversionError(
+                    "Output path required for combine PDF operation".into(),
+                ));
+            };
+
+            return Ok(Intent::CombineToPdf(CombineToPdfIntent { inputs, output }));
         }
 
         Err(Error::ConversionError(format!(
