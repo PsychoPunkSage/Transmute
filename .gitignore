@@ -35,7 +35,6 @@ Thumbs.db
 /tests/output/
 /tests/tmp/
 *.pdf
-*.png
 *.jpg
 *.jpeg
 *.webp
