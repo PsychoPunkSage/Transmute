@@ -336,81 +336,102 @@ impl TransmuteApp {
         for (idx, file) in files.iter().enumerate() {
             let is_selected = selected_idx == Some(idx);
 
-            // Create a selectable frame for each file
+            // Background color for selection
             let frame_fill = if is_selected {
                 Theme::PRIMARY.gamma_multiply(0.3)
             } else {
                 egui::Color32::TRANSPARENT
             };
 
-            let response = egui::Frame::none()
+            // Outer frame for visual styling only
+            egui::Frame::none()
                 .inner_margin(egui::Margin::symmetric(8.0, 6.0))
                 .fill(frame_fill)
                 .rounding(egui::Rounding::same(4.0))
                 .show(ui, |ui| {
+                    ui.set_min_size(egui::vec2(ui.available_width(), 0.0));
+
                     ui.horizontal(|ui| {
-                        // Thumbnail (48x48)
-                        let thumb_size = egui::Vec2::splat(48.0);
-                        if let Some(cached) = self.texture_cache.get_thumbnail(&file.path) {
-                            let image = egui::Image::new(&cached.texture)
-                                .fit_to_exact_size(thumb_size)
-                                .rounding(egui::Rounding::same(4.0));
-                            ui.add(image);
-                        } else {
-                            // Placeholder while loading
-                            egui::Frame::none()
-                                .fill(Theme::BG_HOVER)
-                                .rounding(egui::Rounding::same(4.0))
-                                .show(ui, |ui| {
-                                    ui.allocate_space(thumb_size);
+                        // === LEFT SIDE: Clickable area for selection ===
+                        // Calculate available width minus button space
+                        let available = ui.available_width();
+                        let button_space = 70.0; // Space for remove button
+                        let select_width = available - button_space;
+
+                        // Create a clickable selection area
+                        let select_response = ui.allocate_ui_with_layout(
+                            egui::vec2(select_width, 48.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                // Thumbnail (48x48)
+                                let thumb_size = egui::Vec2::splat(48.0);
+                                if let Some(cached) = self.texture_cache.get_thumbnail(&file.path) {
+                                    let image = egui::Image::new(&cached.texture)
+                                        .fit_to_exact_size(thumb_size)
+                                        .rounding(egui::Rounding::same(4.0));
+                                    ui.add(image);
+                                } else {
+                                    // Placeholder while loading
+                                    egui::Frame::none()
+                                        .fill(Theme::BG_HOVER)
+                                        .rounding(egui::Rounding::same(4.0))
+                                        .show(ui, |ui| {
+                                            ui.allocate_space(thumb_size);
+                                        });
+                                }
+
+                                ui.add_space(8.0);
+
+                                // File info column
+                                ui.vertical(|ui| {
+                                    // Filename
+                                    ui.label(
+                                        egui::RichText::new(
+                                            file.path
+                                                .file_name()
+                                                .and_then(|n| n.to_str())
+                                                .unwrap_or("Unknown"),
+                                        )
+                                        .size(13.0),
+                                    );
+
+                                    // Status and dimensions
+                                    ui.horizontal(|ui| {
+                                        let icon = Theme::status_icon(&file.status);
+                                        let color = Theme::status_color(&file.status);
+                                        ui.colored_label(color, egui::RichText::new(icon).size(12.0));
+
+                                        if let Some(cached) = self.texture_cache.get_thumbnail(&file.path) {
+                                            ui.label(
+                                                egui::RichText::new(format!(
+                                                    "{}x{}",
+                                                    cached.metadata.width, cached.metadata.height
+                                                ))
+                                                .size(11.0)
+                                                .color(Theme::TEXT_SECONDARY),
+                                            );
+                                        }
+                                    });
                                 });
+                            },
+                        );
+
+                        // Make the selection area clickable (separate from button)
+                        let select_id = ui.id().with(("file_select", idx));
+                        let select_click = ui.interact(select_response.response.rect, select_id, egui::Sense::click());
+                        if select_click.clicked() {
+                            file_to_select = Some(idx);
                         }
 
-                        ui.add_space(8.0);
-
-                        // File info column
-                        ui.vertical(|ui| {
-                            // Filename with consistent styling
-                            ui.label(
-                                egui::RichText::new(
-                                    file.path
-                                        .file_name()
-                                        .and_then(|n| n.to_str())
-                                        .unwrap_or("Unknown"),
-                                )
-                                .size(13.0),
-                            );
-
-                            // Dimensions (if available from cache)
-                            ui.horizontal(|ui| {
-                                // Status icon
-                                let icon = Theme::status_icon(&file.status);
-                                let color = Theme::status_color(&file.status);
-                                ui.colored_label(color, egui::RichText::new(icon).size(12.0));
-
-                                // Show dimensions if thumbnail is loaded
-                                if let Some(cached) = self.texture_cache.get_thumbnail(&file.path) {
-                                    ui.label(
-                                        egui::RichText::new(format!(
-                                            "{}x{}",
-                                            cached.metadata.width, cached.metadata.height
-                                        ))
-                                        .size(11.0)
-                                        .color(Theme::TEXT_SECONDARY),
-                                    );
-                                }
-                            });
-                        });
-
+                        // === RIGHT SIDE: Remove button (completely separate) ===
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            // Remove button for pending files
                             if matches!(file.status, FileStatus::Pending) {
                                 if ui.small_button("Remove").clicked() {
                                     file_to_remove = Some(idx);
                                 }
                             }
 
-                            // Error message display
+                            // Error message
                             if let Some(error) = &file.error_message {
                                 ui.add_space(8.0);
                                 ui.colored_label(
@@ -420,15 +441,9 @@ impl TransmuteApp {
                             }
                         });
                     });
-                })
-                .response;
+                });
 
-            // Handle click for selection
-            if response.interact(egui::Sense::click()).clicked() {
-                file_to_select = Some(idx);
-            }
-
-            // Separator between items (except for last item)
+            // Separator between items
             if idx < files.len() - 1 {
                 ui.add_space(2.0);
                 ui.separator();
@@ -439,6 +454,8 @@ impl TransmuteApp {
         // Apply removal first (before selection to avoid stale indices)
         if let Some(idx) = file_to_remove {
             self.state.remove_file(idx);
+            // Don't process selection if we just removed a file
+            return;
         }
 
         // Apply selection change after iteration

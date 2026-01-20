@@ -144,16 +144,29 @@ impl AppState {
     /// Remove file at index
     pub fn remove_file(&self, index: usize) {
         let mut inner = self.inner.lock();
+        println!("[STATE] remove_file called with index {}, current file count: {}", index, inner.input_files.len());
+        tracing::debug!("remove_file called with index {}, current file count: {}", index, inner.input_files.len());
         if index < inner.input_files.len() {
-            inner.input_files.remove(index);
+            let removed = inner.input_files.remove(index);
+            println!("[STATE] Removed file: {:?}, new file count: {}", removed.path.file_name(), inner.input_files.len());
+            tracing::debug!("Removed file: {:?}, new file count: {}", removed.path.file_name(), inner.input_files.len());
             // Adjust selection if needed
             if let Some(selected) = inner.selected_file_index {
+                println!("[STATE] Current selection: {}", selected);
+                tracing::debug!("Current selection: {}", selected);
                 if selected == index {
+                    println!("[STATE] Removed file was selected, clearing selection");
+                    tracing::debug!("Removed file was selected, clearing selection");
                     inner.selected_file_index = None;
                 } else if selected > index {
+                    println!("[STATE] Adjusting selection from {} to {}", selected, selected - 1);
+                    tracing::debug!("Adjusting selection from {} to {}", selected, selected - 1);
                     inner.selected_file_index = Some(selected - 1);
                 }
             }
+        } else {
+            println!("[STATE] ERROR: remove_file index {} out of bounds (len: {})", index, inner.input_files.len());
+            tracing::warn!("remove_file: index {} out of bounds (len: {})", index, inner.input_files.len());
         }
     }
 
