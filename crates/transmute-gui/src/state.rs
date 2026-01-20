@@ -37,6 +37,15 @@ struct AppStateInner {
 
     /// Settings
     pub settings: Settings,
+
+    /// Selected file index for preview
+    pub selected_file_index: Option<usize>,
+
+    /// Preview panel visibility
+    pub preview_panel_visible: bool,
+
+    /// Show output preview (for completed files)
+    pub show_output_preview: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +89,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            use_gpu: true,
+            use_gpu: false,
             auto_open_output: false,
             dark_mode: true,
         }
@@ -100,6 +109,9 @@ impl AppState {
                 processing: ProcessingState::Idle,
                 nl_command: String::new(),
                 settings: Settings::default(),
+                selected_file_index: None,
+                preview_panel_visible: true,
+                show_output_preview: false,
             })),
         }
     }
@@ -125,13 +137,36 @@ impl AppState {
         let mut inner = self.inner.lock();
         inner.input_files.clear();
         inner.processing = ProcessingState::Idle;
+        inner.selected_file_index = None;
+        inner.show_output_preview = false;
     }
 
     /// Remove file at index
     pub fn remove_file(&self, index: usize) {
         let mut inner = self.inner.lock();
+        println!("[STATE] remove_file called with index {}, current file count: {}", index, inner.input_files.len());
+        tracing::debug!("remove_file called with index {}, current file count: {}", index, inner.input_files.len());
         if index < inner.input_files.len() {
-            inner.input_files.remove(index);
+            let removed = inner.input_files.remove(index);
+            println!("[STATE] Removed file: {:?}, new file count: {}", removed.path.file_name(), inner.input_files.len());
+            tracing::debug!("Removed file: {:?}, new file count: {}", removed.path.file_name(), inner.input_files.len());
+            // Adjust selection if needed
+            if let Some(selected) = inner.selected_file_index {
+                println!("[STATE] Current selection: {}", selected);
+                tracing::debug!("Current selection: {}", selected);
+                if selected == index {
+                    println!("[STATE] Removed file was selected, clearing selection");
+                    tracing::debug!("Removed file was selected, clearing selection");
+                    inner.selected_file_index = None;
+                } else if selected > index {
+                    println!("[STATE] Adjusting selection from {} to {}", selected, selected - 1);
+                    tracing::debug!("Adjusting selection from {} to {}", selected, selected - 1);
+                    inner.selected_file_index = Some(selected - 1);
+                }
+            }
+        } else {
+            println!("[STATE] ERROR: remove_file index {} out of bounds (len: {})", index, inner.input_files.len());
+            tracing::warn!("remove_file: index {} out of bounds (len: {})", index, inner.input_files.len());
         }
     }
 
@@ -238,6 +273,56 @@ impl AppState {
     {
         let mut inner = self.inner.lock();
         f(&mut inner.settings);
+    }
+
+    /// Get selected file index
+    pub fn selected_file_index(&self) -> Option<usize> {
+        self.inner.lock().selected_file_index
+    }
+
+    /// Set selected file index
+    pub fn set_selected_file_index(&self, index: Option<usize>) {
+        self.inner.lock().selected_file_index = index;
+    }
+
+    /// Get preview panel visibility
+    pub fn preview_panel_visible(&self) -> bool {
+        self.inner.lock().preview_panel_visible
+    }
+
+    /// Set preview panel visibility
+    pub fn set_preview_panel_visible(&self, visible: bool) {
+        self.inner.lock().preview_panel_visible = visible;
+    }
+
+    /// Toggle preview panel visibility
+    pub fn toggle_preview_panel(&self) {
+        let mut inner = self.inner.lock();
+        inner.preview_panel_visible = !inner.preview_panel_visible;
+    }
+
+    /// Get show output preview state
+    pub fn show_output_preview(&self) -> bool {
+        self.inner.lock().show_output_preview
+    }
+
+    /// Set show output preview state
+    pub fn set_show_output_preview(&self, show: bool) {
+        self.inner.lock().show_output_preview = show;
+    }
+
+    /// Toggle show output preview
+    pub fn toggle_output_preview(&self) {
+        let mut inner = self.inner.lock();
+        inner.show_output_preview = !inner.show_output_preview;
+    }
+
+    /// Get selected file if valid
+    pub fn selected_file(&self) -> Option<InputFile> {
+        let inner = self.inner.lock();
+        inner.selected_file_index.and_then(|idx| {
+            inner.input_files.get(idx).cloned()
+        })
     }
 }
 

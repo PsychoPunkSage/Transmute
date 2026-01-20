@@ -3,12 +3,17 @@
 use transmute_gui::TransmuteApp;
 
 fn main() -> eframe::Result<()> {
-    // Initialize logging
+    // Initialize logging with debug level for development
     tracing_subscriber::fmt()
-        .with_env_filter("transmute=info")
+        .with_env_filter("transmute=debug")
         .with_target(false)
         .without_time()
         .init();
+
+    println!("===========================================");
+    println!("    Transmute GUI Starting");
+    println!("    Debug output enabled");
+    println!("===========================================");
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

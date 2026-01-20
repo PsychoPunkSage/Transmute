@@ -1,3 +1,6 @@
+use crate::preview::{
+    create_texture, format_file_size, CachedImage, ImageLoader, LoadingState, TextureCache,
+};
 use crate::state::{AppState, FileStatus, Operation, ProcessingState};
 use crate::theme::Theme;
 use crate::widgets;
@@ -10,7 +13,13 @@ pub struct TransmuteApp {
     state: AppState,
     converter: Arc<Converter>,
     show_settings: bool,
+    settings_button_rect: Option<egui::Rect>,
     processing_handle: Option<std::thread::JoinHandle<()>>,
+    texture_cache: TextureCache,
+    image_loader: ImageLoader,
+    preview_panel_width: f32,
+    // Temporary settings edit buffer (persists while settings panel is open)
+    temp_settings: Option<crate::state::Settings>,
 }
 
 impl TransmuteApp {
@@ -25,7 +34,50 @@ impl TransmuteApp {
             state: AppState::new(),
             converter: Arc::new(converter),
             show_settings: false,
+            settings_button_rect: None,
             processing_handle: None,
+            texture_cache: TextureCache::new(50, 100), // 50 full, 100 thumbnails
+            image_loader: ImageLoader::new(),
+            preview_panel_width: 350.0,
+            temp_settings: None,
+        }
+    }
+
+    /// Process completed thumbnail/image loads from the background thread
+    fn process_thumbnail_results(&mut self, ctx: &egui::Context) {
+        let responses = self.image_loader.poll_responses();
+        for response in responses {
+            match response.result {
+                Ok((color_image, metadata)) => {
+                    let texture = create_texture(
+                        ctx,
+                        response.path.to_string_lossy().to_string(),
+                        color_image,
+                    );
+                    let cached = CachedImage {
+                        texture,
+                        metadata,
+                        state: LoadingState::Loaded,
+                        last_access: std::time::Instant::now(),
+                    };
+                    if response.is_thumbnail {
+                        self.texture_cache
+                            .insert_thumbnail(response.path, cached);
+                    } else {
+                        self.texture_cache.insert(response.path, cached);
+                    }
+                }
+                Err(_e) => {
+                    // Failed to load - we don't cache failures, just skip
+                }
+            }
+        }
+    }
+
+    /// Ensure a full-size preview is loaded for the given path
+    fn ensure_full_loaded(&mut self, path: &PathBuf) {
+        if !self.texture_cache.has_full(path) && !self.image_loader.is_pending(path) {
+            self.image_loader.request_full(path.clone());
         }
     }
 
@@ -43,11 +95,17 @@ impl TransmuteApp {
                 ui.add_space(8.0);
 
                 // Settings button with consistent styling
-                if ui
-                    .button(egui::RichText::new("Settings").size(14.0))
-                    .clicked()
-                {
+                let settings_button = ui.button(egui::RichText::new("Settings").size(14.0));
+
+                // Store button position for window placement
+                self.settings_button_rect = Some(settings_button.rect);
+
+                if settings_button.clicked() {
                     self.show_settings = !self.show_settings;
+                    // Initialize temp settings when opening the panel
+                    if self.show_settings {
+                        self.temp_settings = Some(self.state.settings());
+                    }
                 }
 
                 ui.add_space(12.0);
@@ -203,16 +261,18 @@ impl TransmuteApp {
         let response = widgets::drop_zone(ui, false);
 
         if response.clicked() {
-            // Open file picker
+            // Open file picker - allow both images and PDFs
             if let Some(paths) = rfd::FileDialog::new()
                 .add_filter("Images", &["png", "jpg", "jpeg", "webp", "tiff", "bmp"])
+                .add_filter("PDF", &["pdf"])
+                .add_filter("All Supported", &["png", "jpg", "jpeg", "webp", "tiff", "bmp", "pdf"])
                 .pick_files()
             {
                 self.state.add_files(paths);
             }
         }
 
-        // Handle drag-drop
+        // Handle drag-drop - filter for supported file types
         ui.ctx().input(|i| {
             if !i.raw.dropped_files.is_empty() {
                 let paths: Vec<PathBuf> = i
@@ -220,6 +280,19 @@ impl TransmuteApp {
                     .dropped_files
                     .iter()
                     .filter_map(|f| f.path.clone())
+                    .filter(|p| {
+                        // Accept files with supported extensions (case-insensitive)
+                        p.extension()
+                            .and_then(|ext| ext.to_str())
+                            .map(|ext| {
+                                let ext_lower = ext.to_lowercase();
+                                matches!(
+                                    ext_lower.as_str(),
+                                    "png" | "jpg" | "jpeg" | "webp" | "tiff" | "bmp" | "pdf"
+                                )
+                            })
+                            .unwrap_or(false)
+                    })
                     .collect();
                 self.state.add_files(paths);
             }
@@ -228,6 +301,7 @@ impl TransmuteApp {
 
     fn render_file_list(&mut self, ui: &mut egui::Ui) {
         let files = self.state.input_files();
+        let selected_idx = self.state.selected_file_index();
 
         if files.is_empty() {
             // Empty state with better vertical centering
@@ -236,63 +310,159 @@ impl TransmuteApp {
                 ui.label(
                     egui::RichText::new("No files selected")
                         .size(14.0)
-                        .color(Theme::TEXT_SECONDARY)
+                        .color(Theme::TEXT_SECONDARY),
                 );
             });
             return;
         }
 
+        // Collect paths that need thumbnails loaded
+        let paths_to_load: Vec<PathBuf> = files
+            .iter()
+            .map(|f| f.path.clone())
+            .filter(|p| {
+                !self.texture_cache.has_thumbnail(p) && !self.image_loader.is_pending(p)
+            })
+            .collect();
+
+        for path in paths_to_load {
+            self.image_loader.request_thumbnail(path);
+        }
+
         // File list with proper spacing (ScrollArea handled by parent)
+        let mut file_to_select: Option<usize> = None;
+        let mut file_to_remove: Option<usize> = None;
+
         for (idx, file) in files.iter().enumerate() {
-            // Each file entry in a frame with consistent padding
+            let is_selected = selected_idx == Some(idx);
+
+            // Background color for selection
+            let frame_fill = if is_selected {
+                Theme::PRIMARY.gamma_multiply(0.3)
+            } else {
+                egui::Color32::TRANSPARENT
+            };
+
+            // Outer frame for visual styling only
             egui::Frame::none()
                 .inner_margin(egui::Margin::symmetric(8.0, 6.0))
+                .fill(frame_fill)
+                .rounding(egui::Rounding::same(4.0))
                 .show(ui, |ui| {
+                    ui.set_min_size(egui::vec2(ui.available_width(), 0.0));
+
                     ui.horizontal(|ui| {
-                        // Status icon with fixed width for alignment
-                        let icon = Theme::status_icon(&file.status);
-                        let color = Theme::status_color(&file.status);
-                        ui.colored_label(color, egui::RichText::new(icon).size(16.0));
+                        // === LEFT SIDE: Clickable area for selection ===
+                        // Calculate available width minus button space
+                        let available = ui.available_width();
+                        let button_space = 70.0; // Space for remove button
+                        let select_width = available - button_space;
 
-                        ui.add_space(8.0);
+                        // Create a clickable selection area
+                        let select_response = ui.allocate_ui_with_layout(
+                            egui::vec2(select_width, 48.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                // Thumbnail (48x48)
+                                let thumb_size = egui::Vec2::splat(48.0);
+                                if let Some(cached) = self.texture_cache.get_thumbnail(&file.path) {
+                                    let image = egui::Image::new(&cached.texture)
+                                        .fit_to_exact_size(thumb_size)
+                                        .rounding(egui::Rounding::same(4.0));
+                                    ui.add(image);
+                                } else {
+                                    // Placeholder while loading
+                                    egui::Frame::none()
+                                        .fill(Theme::BG_HOVER)
+                                        .rounding(egui::Rounding::same(4.0))
+                                        .show(ui, |ui| {
+                                            ui.allocate_space(thumb_size);
+                                        });
+                                }
 
-                        // Filename with consistent styling
-                        ui.label(
-                            egui::RichText::new(
-                                file.path
-                                    .file_name()
-                                    .and_then(|n| n.to_str())
-                                    .unwrap_or("Unknown")
-                            )
-                            .size(13.0)
+                                ui.add_space(8.0);
+
+                                // File info column
+                                ui.vertical(|ui| {
+                                    // Filename
+                                    ui.label(
+                                        egui::RichText::new(
+                                            file.path
+                                                .file_name()
+                                                .and_then(|n| n.to_str())
+                                                .unwrap_or("Unknown"),
+                                        )
+                                        .size(13.0),
+                                    );
+
+                                    // Status and dimensions
+                                    ui.horizontal(|ui| {
+                                        let icon = Theme::status_icon(&file.status);
+                                        let color = Theme::status_color(&file.status);
+                                        ui.colored_label(color, egui::RichText::new(icon).size(12.0));
+
+                                        if let Some(cached) = self.texture_cache.get_thumbnail(&file.path) {
+                                            ui.label(
+                                                egui::RichText::new(format!(
+                                                    "{}x{}",
+                                                    cached.metadata.width, cached.metadata.height
+                                                ))
+                                                .size(11.0)
+                                                .color(Theme::TEXT_SECONDARY),
+                                            );
+                                        }
+                                    });
+                                });
+                            },
                         );
 
+                        // Make the selection area clickable (separate from button)
+                        let select_id = ui.id().with(("file_select", idx));
+                        let select_click = ui.interact(select_response.response.rect, select_id, egui::Sense::click());
+                        if select_click.clicked() {
+                            file_to_select = Some(idx);
+                        }
+
+                        // === RIGHT SIDE: Remove button (completely separate) ===
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            // Remove button for pending files
                             if matches!(file.status, FileStatus::Pending) {
                                 if ui.small_button("Remove").clicked() {
-                                    self.state.remove_file(idx);
+                                    file_to_remove = Some(idx);
                                 }
                             }
 
-                            // Error message display
+                            // Error message
                             if let Some(error) = &file.error_message {
                                 ui.add_space(8.0);
                                 ui.colored_label(
                                     Theme::ERROR,
-                                    egui::RichText::new(error).size(12.0)
+                                    egui::RichText::new(error).size(12.0),
                                 );
                             }
                         });
                     });
                 });
 
-            // Separator between items (except for last item)
+            // Separator between items
             if idx < files.len() - 1 {
                 ui.add_space(2.0);
                 ui.separator();
                 ui.add_space(2.0);
             }
+        }
+
+        // Apply removal first (before selection to avoid stale indices)
+        if let Some(idx) = file_to_remove {
+            self.state.remove_file(idx);
+            // Don't process selection if we just removed a file
+            return;
+        }
+
+        // Apply selection change after iteration
+        if let Some(idx) = file_to_select {
+            self.state.set_selected_file_index(Some(idx));
+            // Show preview panel when file is selected
+            self.state.set_preview_panel_visible(true);
         }
     }
 
@@ -480,13 +650,35 @@ impl TransmuteApp {
     fn render_settings_panel(&mut self, ctx: &egui::Context) {
         let mut close_window = false;
         let mut save_settings = false;
-        let mut settings = self.state.settings();
 
-        egui::Window::new("Settings")
+        // Initialize temp_settings if not present (defensive check)
+        if self.temp_settings.is_none() {
+            self.temp_settings = Some(self.state.settings());
+        }
+
+        // Calculate window position below Settings button
+        let window_pos = self.settings_button_rect.map(|rect| {
+            egui::Pos2::new(
+                rect.right() - 400.0, // Align right edge with button (accounting for window width)
+                rect.bottom() + 4.0,   // Position just below the button
+            )
+        });
+
+        let mut window = egui::Window::new("Settings")
             .open(&mut self.show_settings)
             .default_width(400.0)
-            .resizable(false)
-            .show(ctx, |ui| {
+            .resizable(false);
+
+        // Set fixed position if we have the button rect
+        if let Some(pos) = window_pos {
+            window = window.fixed_pos(pos);
+        }
+
+        window.show(ctx, |ui| {
+                // Get mutable reference to temp_settings
+                // unwrap is safe because we initialized it above
+                let settings = self.temp_settings.as_mut().unwrap();
+
                 // Settings content with proper spacing
                 ui.add_space(8.0);
 
@@ -567,11 +759,229 @@ impl TransmuteApp {
             });
 
         if save_settings {
-            self.state.update_settings(|s| *s = settings);
+            // Save the temp settings to state
+            if let Some(settings) = self.temp_settings.take() {
+                self.state.update_settings(|s| *s = settings);
+            }
         }
         if close_window {
             self.show_settings = false;
+            // Clear temp settings when closing without saving
+            self.temp_settings = None;
         }
+    }
+
+    fn render_preview_panel(&mut self, ctx: &egui::Context) {
+        let selected_file = self.state.selected_file();
+        let show_output = self.state.show_output_preview();
+
+        SidePanel::right("preview_panel")
+            .default_width(self.preview_panel_width)
+            .width_range(250.0..=500.0)
+            .resizable(true)
+            .frame(
+                egui::Frame::none()
+                    .fill(Theme::BG_PANEL)
+                    .inner_margin(egui::Margin::same(16.0)),
+            )
+            .show(ctx, |ui| {
+                // Header with close button
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Preview").size(16.0).strong());
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Close").clicked() {
+                            self.state.set_preview_panel_visible(false);
+                        }
+                    });
+                });
+
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(12.0);
+
+                if let Some(file) = selected_file {
+                    // Input/Output toggle for completed files
+                    if file.status == FileStatus::Complete && file.output_path.is_some() {
+                        ui.horizontal(|ui| {
+                            if ui
+                                .selectable_label(!show_output, "Input")
+                                .clicked()
+                            {
+                                self.state.set_show_output_preview(false);
+                            }
+                            if ui.selectable_label(show_output, "Output").clicked() {
+                                self.state.set_show_output_preview(true);
+                            }
+                        });
+                        ui.add_space(12.0);
+                    }
+
+                    // Determine which path to show
+                    let preview_path = if show_output && file.output_path.is_some() {
+                        file.output_path.as_ref().unwrap().clone()
+                    } else {
+                        file.path.clone()
+                    };
+
+                    // Ensure full-size preview is loaded
+                    self.ensure_full_loaded(&preview_path);
+
+                    // Preview image
+                    let available_width = ui.available_width();
+                    let max_preview_height = 400.0;
+
+                    if let Some(cached) = self.texture_cache.get(&preview_path) {
+                        // Calculate scaled size maintaining aspect ratio
+                        let aspect = cached.metadata.width as f32 / cached.metadata.height as f32;
+                        let (display_width, display_height) = if aspect > 1.0 {
+                            let w = available_width.min(800.0);
+                            let h = w / aspect;
+                            if h > max_preview_height {
+                                (max_preview_height * aspect, max_preview_height)
+                            } else {
+                                (w, h)
+                            }
+                        } else {
+                            let h = max_preview_height;
+                            let w = h * aspect;
+                            if w > available_width {
+                                (available_width, available_width / aspect)
+                            } else {
+                                (w, h)
+                            }
+                        };
+
+                        ui.vertical_centered(|ui| {
+                            let image = egui::Image::new(&cached.texture)
+                                .fit_to_exact_size(egui::Vec2::new(display_width, display_height))
+                                .rounding(egui::Rounding::same(4.0));
+                            ui.add(image);
+                        });
+
+                        ui.add_space(16.0);
+                        ui.separator();
+                        ui.add_space(12.0);
+
+                        // Metadata section
+                        ui.label(
+                            egui::RichText::new("Details")
+                                .size(14.0)
+                                .color(Theme::TEXT_PRIMARY),
+                        );
+                        ui.add_space(8.0);
+
+                        egui::Grid::new("metadata_grid")
+                            .num_columns(2)
+                            .spacing([12.0, 6.0])
+                            .show(ui, |ui| {
+                                // Filename
+                                ui.label(
+                                    egui::RichText::new("Name")
+                                        .size(12.0)
+                                        .color(Theme::TEXT_SECONDARY),
+                                );
+                                ui.label(
+                                    egui::RichText::new(
+                                        preview_path
+                                            .file_name()
+                                            .and_then(|n| n.to_str())
+                                            .unwrap_or("Unknown"),
+                                    )
+                                    .size(12.0),
+                                );
+                                ui.end_row();
+
+                                // Dimensions
+                                ui.label(
+                                    egui::RichText::new("Dimensions")
+                                        .size(12.0)
+                                        .color(Theme::TEXT_SECONDARY),
+                                );
+                                ui.label(
+                                    egui::RichText::new(format!(
+                                        "{} x {} px",
+                                        cached.metadata.width, cached.metadata.height
+                                    ))
+                                    .size(12.0),
+                                );
+                                ui.end_row();
+
+                                // Format
+                                ui.label(
+                                    egui::RichText::new("Format")
+                                        .size(12.0)
+                                        .color(Theme::TEXT_SECONDARY),
+                                );
+                                ui.label(
+                                    egui::RichText::new(&cached.metadata.format).size(12.0),
+                                );
+                                ui.end_row();
+
+                                // Color type
+                                ui.label(
+                                    egui::RichText::new("Color")
+                                        .size(12.0)
+                                        .color(Theme::TEXT_SECONDARY),
+                                );
+                                ui.label(
+                                    egui::RichText::new(&cached.metadata.color_type).size(12.0),
+                                );
+                                ui.end_row();
+
+                                // Alpha
+                                ui.label(
+                                    egui::RichText::new("Alpha")
+                                        .size(12.0)
+                                        .color(Theme::TEXT_SECONDARY),
+                                );
+                                ui.label(
+                                    egui::RichText::new(if cached.metadata.has_alpha {
+                                        "Yes"
+                                    } else {
+                                        "No"
+                                    })
+                                    .size(12.0),
+                                );
+                                ui.end_row();
+
+                                // File size
+                                ui.label(
+                                    egui::RichText::new("Size")
+                                        .size(12.0)
+                                        .color(Theme::TEXT_SECONDARY),
+                                );
+                                ui.label(
+                                    egui::RichText::new(format_file_size(cached.metadata.file_size))
+                                        .size(12.0),
+                                );
+                                ui.end_row();
+                            });
+                    } else {
+                        // Loading state
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(50.0);
+                            ui.spinner();
+                            ui.add_space(8.0);
+                            ui.label(
+                                egui::RichText::new("Loading preview...")
+                                    .size(12.0)
+                                    .color(Theme::TEXT_SECONDARY),
+                            );
+                        });
+                    }
+                } else {
+                    // No file selected
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(50.0);
+                        ui.label(
+                            egui::RichText::new("Select a file to preview")
+                                .size(14.0)
+                                .color(Theme::TEXT_SECONDARY),
+                        );
+                    });
+                }
+            });
     }
 
     fn start_processing(&mut self) {
@@ -733,6 +1143,9 @@ impl TransmuteApp {
 
 impl eframe::App for TransmuteApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Process any completed thumbnail/image loads first
+        self.process_thumbnail_results(ctx);
+
         // Top bar with consistent styling
         TopBottomPanel::top("top_panel")
             .frame(
@@ -783,6 +1196,11 @@ impl eframe::App for TransmuteApp {
                 self.render_natural_language(ui);
             });
 
+        // Right preview panel (collapsible)
+        if self.state.preview_panel_visible() {
+            self.render_preview_panel(ctx);
+        }
+
         // Bottom panel for fixed action buttons and progress
         TopBottomPanel::bottom("bottom_panel")
             .frame(
@@ -811,15 +1229,25 @@ impl eframe::App for TransmuteApp {
             .frame(
                 egui::Frame::none()
                     .fill(Theme::BG_DARK)
-                    .inner_margin(egui::Margin::same(20.0))
+                    .inner_margin(egui::Margin::same(20.0)),
             )
             .show(ctx, |ui| {
-                // Files section header
-                ui.label(
-                    egui::RichText::new("Files")
-                        .size(18.0)
-                        .strong()
-                );
+                // Files section header with preview toggle
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Files").size(18.0).strong());
+
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let preview_visible = self.state.preview_panel_visible();
+                        let toggle_text = if preview_visible {
+                            "Hide Preview"
+                        } else {
+                            "Show Preview"
+                        };
+                        if ui.button(toggle_text).clicked() {
+                            self.state.toggle_preview_panel();
+                        }
+                    });
+                });
                 ui.add_space(12.0);
 
                 // Drop zone for file selection
@@ -833,11 +1261,9 @@ impl eframe::App for TransmuteApp {
                     .inner_margin(egui::Margin::same(12.0))
                     .show(ui, |ui| {
                         // ScrollArea takes all remaining vertical space
-                        ScrollArea::vertical()
-                            .auto_shrink([false; 2])
-                            .show(ui, |ui| {
-                                self.render_file_list(ui);
-                            });
+                        ScrollArea::vertical().auto_shrink([false; 2]).show(ui, |ui| {
+                            self.render_file_list(ui);
+                        });
                     });
             });
 
