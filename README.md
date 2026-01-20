@@ -24,7 +24,7 @@ Transmute is a high-performance media conversion tool that processes images and 
 
 ### User Interface
 
-![Transmute GUI](./images/UI.png)
+![Transmute GUI](./images/gui.png)
 
 The Transmute GUI provides an intuitive interface for media conversion with drag-and-drop support, real-time progress tracking, and easy configuration management.
 
