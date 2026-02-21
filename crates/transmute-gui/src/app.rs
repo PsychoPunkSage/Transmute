@@ -1065,8 +1065,8 @@ impl TransmuteApp {
                 let result = match operation {
                     Operation::Convert => converter.convert_image(
                         &file.path,
-                        state.target_format(),
                         state.output_dir(),
+                        state.target_format(),
                     ),
 
                     Operation::Compress => converter
