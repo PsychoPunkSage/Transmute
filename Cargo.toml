@@ -4,7 +4,12 @@ members = [
     "crates/transmute-common",
     "crates/transmute-formats",
     "crates/transmute-core",
-    "crates/transmute-integration-tests", "crates/transmute-compress", "crates/transmute-nlp", "crates/transmute-cli", "crates/transmute-gui",
+    "crates/transmute-integration-tests",
+    "crates/transmute-compress",
+    "crates/transmute-nlp",
+    "crates/transmute-cli",
+    "crates/transmute-gui",
+    "crates/transmute-jni",
 ]
 
 [workspace.package]
@@ -84,12 +89,18 @@ egui_extras = { version = "0.30", features = ["image"] } # adds image rendering
 rfd = "0.17"  # provides native file picker dialogs (cross-platform)
 parking_lot = "0.12" # efficient mutexes. (smaller + faster)
 
+# JNI / Android
+jni = "0.21"
+android_logger = "0.14"
+log = "0.4"
+
 # workspace crates
 transmute-nlp = { path = "crates/transmute-nlp" }
 transmute-core = { path = "crates/transmute-core" }
 transmute-common = { path = "crates/transmute-common" }
 transmute-formats = { path = "crates/transmute-formats" }
 transmute-compress = { path = "crates/transmute-compress" }
+transmute-jni = { path = "crates/transmute-jni" }
 
 [profile.release]
 opt-level = 3
