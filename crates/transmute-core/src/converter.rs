@@ -23,8 +23,8 @@ impl Converter {
     pub fn convert_image(
         &self,
         input: &Path,
-        target_format: MediaFormat,
         output: Option<PathBuf>,
+        target_format: MediaFormat,
     ) -> Result<PathBuf> {
         // Validate input
         self.path_manager.validate_input(input)?;
@@ -35,7 +35,10 @@ impl Converter {
                 out
             } else {
                 // Generate PDF output path based on input
-                let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("output");
+                let stem = input
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("output");
                 let parent = input.parent().unwrap_or_else(|| Path::new("."));
                 parent.join(format!("{}.pdf", stem))
             };
