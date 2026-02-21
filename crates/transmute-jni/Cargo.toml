@@ -1,0 +1,24 @@
+[package]
+name = "transmute-jni"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# cdylib produces libtransmute_jni.so — the shared library loaded by the JVM
+crate-type = ["cdylib"]
+
+[dependencies]
+# JNI bindings: lets Rust export functions callable from Kotlin/Java
+jni = { workspace = true }
+
+# Routes Rust log! macros to Android's logcat
+android_logger = { workspace = true }
+log = { workspace = true }
+
+# Parallel processing for batchConvert
+rayon.workspace = true
+
+# Core transmute crates — GPU and PDF-extract features disabled for Android
+transmute-common = { workspace = true, default-features = false }
+transmute-formats = { workspace = true, default-features = false }
+transmute-compress = { workspace = true, default-features = false }
