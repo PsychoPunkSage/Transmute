@@ -1,9 +1,11 @@
-use crate::gpu_convert::GpuColorConverter;
 use crate::quality::{QualityMetric, QualitySettings};
 use image::DynamicImage;
 use std::io::Cursor;
 use std::path::Path;
 use transmute_common::{Error, MediaFormat, Result};
+
+#[cfg(feature = "gpu")]
+use crate::gpu_convert::GpuColorConverter;
 
 /// Compression result with metrics
 #[derive(Debug)]
@@ -32,6 +34,7 @@ impl CompressionResult {
 
 /// GPU-accelerated image compressor
 pub struct ImageCompressor {
+    #[cfg(feature = "gpu")]
     gpu_converter: Option<GpuColorConverter>,
     use_gpu: bool,
 }
@@ -39,6 +42,7 @@ pub struct ImageCompressor {
 impl ImageCompressor {
     /// Create compressor with optional GPU acceleration
     pub fn new(use_gpu: bool) -> Result<Self> {
+        #[cfg(feature = "gpu")]
         let gpu_converter = if use_gpu {
             match transmute_common::GpuContext::new() {
                 Ok(ctx) => match GpuColorConverter::new(ctx.device, ctx.queue) {
@@ -57,8 +61,17 @@ impl ImageCompressor {
             None
         };
 
+        #[cfg(feature = "gpu")]
         let has_gpu = gpu_converter.is_some();
+
+        #[cfg(not(feature = "gpu"))]
+        let has_gpu = {
+            let _ = use_gpu;
+            false
+        };
+
         Ok(Self {
+            #[cfg(feature = "gpu")]
             gpu_converter,
             use_gpu: has_gpu,
         })
@@ -120,20 +133,24 @@ impl ImageCompressor {
     fn compress_jpeg(&self, img: &DynamicImage, quality: QualitySettings) -> Result<Vec<u8>> {
         let quality_value = quality.jpeg_quality();
 
-        // Use GPU for color space conversion if available (>2MP)
-        let pixel_count = img.width() * img.height();
-        let use_gpu_path = self.use_gpu && pixel_count > 2_000_000;
+        #[cfg(feature = "gpu")]
+        {
+            // Use GPU for color space conversion if available (>2MP)
+            let pixel_count = img.width() * img.height();
+            let use_gpu_path = self.use_gpu && pixel_count > 2_000_000;
 
-        if use_gpu_path && self.gpu_converter.is_some() {
-            tracing::debug!("Using GPU-accelerated JPEG compression");
-            self.compress_jpeg_gpu(img, quality_value)
-        } else {
-            tracing::debug!("Using CPU JPEG compression");
-            self.compress_jpeg_cpu(img, quality_value)
+            if use_gpu_path && self.gpu_converter.is_some() {
+                tracing::debug!("Using GPU-accelerated JPEG compression");
+                return self.compress_jpeg_gpu(img, quality_value);
+            }
         }
+
+        tracing::debug!("Using CPU JPEG compression");
+        self.compress_jpeg_cpu(img, quality_value)
     }
 
     /// GPU path: RGB→YCbCr on GPU, then mozjpeg encoding with YCbCr data
+    #[cfg(feature = "gpu")]
     fn compress_jpeg_gpu(&self, img: &DynamicImage, quality: u8) -> Result<Vec<u8>> {
         let converter = self.gpu_converter.as_ref().unwrap();
 
