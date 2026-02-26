@@ -238,7 +238,7 @@ impl PdfExtractor {
     }
 
     /// Extract all pages from PDF as images
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "pdf-extract", not(target_arch = "wasm32")))]
     pub fn extract_pages(&self, pdf_path: &Path) -> Result<Vec<DynamicImage>> {
         use pdfium_render::prelude::*;
 
@@ -292,11 +292,11 @@ impl PdfExtractor {
         Ok(images)
     }
 
-    /// Fallback for WASM or when Pdfium unavailable
-    #[cfg(target_arch = "wasm32")]
+    /// Fallback when pdf-extract feature is disabled or on WASM
+    #[cfg(not(all(feature = "pdf-extract", not(target_arch = "wasm32"))))]
     pub fn extract_pages(&self, _pdf_path: &Path) -> Result<Vec<DynamicImage>> {
         Err(Error::ConversionError(
-            "PDF extraction not supported on WASM".into(),
+            "PDF extraction not available in this build".into(),
         ))
     }
 }

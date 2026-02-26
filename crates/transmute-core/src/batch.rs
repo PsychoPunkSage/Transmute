@@ -130,7 +130,7 @@ impl BatchProcessor {
         use crate::converter::Converter;
 
         let converter = Converter::new()?;
-        converter.convert_image(&job.input, job.output_format, job.output_path)
+        converter.convert_image(&job.input, job.output_path, job.output_format)
     }
 
     /// Convenience method: process batch and wait for completion

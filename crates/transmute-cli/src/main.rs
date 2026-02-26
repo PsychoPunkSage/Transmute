@@ -137,7 +137,7 @@ fn handle_convert(
     }
 
     let input = &inputs[0];
-    let output_path = converter.convert_image(input, format, output)?;
+    let output_path = converter.convert_image(input, output, format)?;
 
     ProgressReporter::finish_bar(&spinner, "Done");
     formatter.print_conversion(input, &output_path, format);

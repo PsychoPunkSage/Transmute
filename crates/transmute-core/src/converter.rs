@@ -77,7 +77,7 @@ impl Converter {
     ) -> Vec<Result<PathBuf>> {
         inputs
             .par_iter()
-            .map(|input| self.convert_image(input, target_format, output_dir.clone()))
+            .map(|input| self.convert_image(input, output_dir.clone(), target_format))
             .collect()
     }
 
@@ -253,7 +253,7 @@ impl Converter {
 
         match intent {
             Intent::Convert(conv) => {
-                let output = self.convert_image(&conv.input, conv.target_format, conv.output)?;
+                let output = self.convert_image(&conv.input, conv.output, conv.target_format)?;
                 Ok(vec![output])
             }
 
@@ -341,8 +341,8 @@ mod tests {
         let converter = Converter::new().unwrap();
         let output = converter.convert_image(
             &input_path,
-            MediaFormat::Jpeg,
             Some(temp_dir.path().to_path_buf()),
+            MediaFormat::Jpeg,
         );
 
         assert!(output.is_ok());

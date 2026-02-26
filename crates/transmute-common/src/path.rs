@@ -8,7 +8,8 @@ pub struct PathManager {
 }
 
 impl PathManager {
-    /// Create new PathManager with default output directory
+    /// Create new PathManager with default output directory.
+    /// Uses the OS user directories (desktop platforms).
     pub fn new() -> Result<Self> {
         let home = directories::UserDirs::new().ok_or_else(|| {
             Error::InvalidPath(PathBuf::from("Could not determine home directory"))
@@ -17,6 +18,16 @@ impl PathManager {
         let default_output_dir = home.home_dir().join("Downloads").join("transmute");
 
         Ok(Self { default_output_dir })
+    }
+
+    /// Create PathManager with a caller-supplied output directory.
+    /// For platforms where the OS provides the path (e.g. Android's
+    /// `getExternalFilesDir()`). The caller is responsible for ensuring
+    /// the directory is writable.
+    pub fn with_output_dir(output_dir: PathBuf) -> Self {
+        Self {
+            default_output_dir: output_dir,
+        }
     }
 
     /// Generate unique output path

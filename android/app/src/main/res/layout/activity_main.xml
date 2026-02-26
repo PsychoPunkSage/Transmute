@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:gravity="center_horizontal">
+
+        <!-- Title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Output format -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Output format"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <Spinner
+            android:id="@+id/formatSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Quality -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Quality (for compression)"
+            android:textSize="14sp"
+            android:layout_marginBottom="4dp" />
+
+        <Spinner
+            android:id="@+id/qualitySpinner"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Pick files -->
+        <Button
+            android:id="@+id/pickButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Pick Image(s)"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Convert -->
+        <Button
+            android:id="@+id/convertButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Convert / Compress"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Images → PDF (generation) — always available; uses printpdf/lopdf, no pdfium required -->
+        <Button
+            android:id="@+id/toPdfButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Images → PDF"
+            android:layout_marginBottom="8dp" />
+
+        <!-- PDF → Images (extraction) — requires libpdfium.so, not bundled in this build.
+             Hidden by default; MainActivity shows it only when pdfExtractSupported() == true. -->
+        <Button
+            android:id="@+id/extractPdfButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="PDF → Images (Extract)"
+            android:visibility="gone"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Status -->
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No files selected."
+            android:textSize="14sp"
+            android:gravity="center" />
+
+    </LinearLayout>
+</ScrollView>

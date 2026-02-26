@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
+[features]
+default = ["gpu"]
+gpu = ["dep:wgpu", "dep:bytemuck", "dep:pollster", "transmute-common/gpu"]
+
 [dependencies]
 transmute-common.workspace = true
 
@@ -12,10 +16,10 @@ image.workspace = true
 tracing.workspace = true
 thiserror.workspace = true
 
-# GPU
-wgpu.workspace = true
-bytemuck.workspace = true
-pollster.workspace = true
+# GPU (optional — disabled for Android builds)
+wgpu = { workspace = true, optional = true }
+bytemuck = { workspace = true, optional = true }
+pollster = { workspace = true, optional = true }
 futures.workspace = true
 
 # Compression
