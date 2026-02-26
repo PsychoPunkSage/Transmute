@@ -52,7 +52,7 @@ chrono = "0.4"
 criterion = { version = "0.8", features = ["html_reports"] }
 
 # PDF Support
-printpdf = { version = "0.8", features = ["png", "jpeg"] } # PDF Generation with PNG and JPEG support
+printpdf = { version = "0.8", default-features = false, features = ["png", "jpeg"] } # PDF Generation with PNG and JPEG support (text_layout/azul disabled — not needed, breaks Android)
 lopdf = "0.38" # low level PDF Manipulation
 pdfium-render = "0.8" # GPU accelerated-rasterization
 
@@ -97,9 +97,9 @@ log = "0.4"
 # workspace crates
 transmute-nlp = { path = "crates/transmute-nlp" }
 transmute-core = { path = "crates/transmute-core" }
-transmute-common = { path = "crates/transmute-common" }
-transmute-formats = { path = "crates/transmute-formats" }
-transmute-compress = { path = "crates/transmute-compress" }
+transmute-common = { path = "crates/transmute-common", default-features = false }
+transmute-formats = { path = "crates/transmute-formats", default-features = false }
+transmute-compress = { path = "crates/transmute-compress", default-features = false }
 transmute-jni = { path = "crates/transmute-jni" }
 
 [profile.release]

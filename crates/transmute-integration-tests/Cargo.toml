@@ -5,10 +5,10 @@ edition = "2021"
 publish = false
 
 [dependencies]
-transmute-common.workspace = true
+transmute-common = { workspace = true, features = ["default"] }
 transmute-core.workspace = true
-transmute-compress.workspace = true
-transmute-formats.workspace = true
+transmute-compress = { workspace = true, features = ["default"] }
+transmute-formats = { workspace = true, features = ["default"] }
 transmute-nlp.workspace = true
 image.workspace = true
 tokio.workspace = true

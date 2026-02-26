@@ -17,7 +17,7 @@ set -euo pipefail
 
 # ── NDK location ────────────────────────────────────────────────────────────
 : "${NDK_HOME:=/opt/android-ndk}"
-TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64"
+TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/windows-x86_64"
 
 if [[ ! -d "$TOOLCHAIN" ]]; then
     echo "ERROR: NDK toolchain not found at $TOOLCHAIN"
